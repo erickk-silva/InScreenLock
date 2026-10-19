@@ -1,0 +1,33 @@
+package com.inscreenlock.app
+
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import org.junit.Rule
+import org.junit.Test
+
+class ConsentScreenTest {
+    @get:Rule
+    val composeRule = createAndroidComposeRule<MainActivity>()
+
+    @Test
+    fun firstLaunchDisclosesMeasurementAndRequiresAffirmativeConsent() {
+        composeRule.onNodeWithText("Seu uso, no seu ritmo").assertIsDisplayed()
+        composeRule.onNodeWithText("inclui mensagens e outras áreas", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText(
+            "Não lemos nem armazenamos mensagens, legendas ou imagens."
+        ).assertIsDisplayed()
+        composeRule.onNodeWithText("Continuar para acessibilidade").assertIsNotEnabled()
+    }
+
+    @Test
+    fun affirmativeConsentLabelTogglesTheContinueAction() {
+        composeRule.onNodeWithTag("accessibility-consent").performScrollTo().performClick()
+        composeRule.onNodeWithText("Continuar para acessibilidade").assertIsEnabled()
+    }
+}

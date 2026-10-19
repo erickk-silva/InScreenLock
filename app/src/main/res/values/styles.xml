@@ -1,0 +1,10 @@
+<resources>
+    <style name="Theme.InScreenLock" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:colorAccent">#69DDBB</item>
+        <item name="android:windowBackground">#101319</item>
+        <item name="android:statusBarColor">#101319</item>
+        <item name="android:navigationBarColor">#101319</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+</resources>

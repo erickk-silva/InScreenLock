@@ -1,0 +1,9 @@
+<resources>
+    <string name="accessibility_service_name">InScreenLock</string>
+    <string name="accessibility_service_description">Mostra o contador de tempo somente no Instagram e no TikTok quando você ativa o monitoramento.</string>
+    <string name="threshold_warning">Você alcançou seu limite diário nos apps.</string>
+    <string name="pause_title">Hora de fazer uma pausa</string>
+    <string name="pause_summary">%1$s usados de %2$d min hoje.</string>
+    <string name="pause_home">Voltar à tela inicial</string>
+    <string name="pause_settings">Abrir configurações do InScreenLock</string>
+</resources>
