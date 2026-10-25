@@ -69,6 +69,9 @@ object DailyTimeCalculator {
             when (event.kind) {
                 UsageSignal.Kind.APP_FOREGROUND -> {
                     val packageName = event.packageName
+                    if (packageName != foregroundPackage) {
+                        foregroundPackage?.let(activeActivities::remove)
+                    }
                     if (packageName == null) {
                         foregroundPackage = null
                     } else {

@@ -16,8 +16,19 @@ object LockPolicy {
         nowMs: Long,
         unlockedDay: String,
         currentDay: String,
+        unlockedElapsedUntilMs: Long? = null,
+        unlockedBootCount: Long? = null,
+        clockReading: ClockReading? = null,
+        unlockedDurationMs: Long = 0L,
     ): Boolean = mode == ReactionMode.LOCK && dataAvailable && credentialAvailable && monitoringEnabled &&
-        usedMs >= limitMs && limitMs > 0 && !UnlockWindow.isActive(unlockedUntilMs, nowMs, unlockedDay, currentDay)
+        usedMs >= limitMs && limitMs > 0 && !(if (
+            unlockedElapsedUntilMs != null && unlockedBootCount != null && clockReading != null
+        ) {
+            unlockedDay == currentDay && StoredDeadline(unlockedUntilMs, unlockedElapsedUntilMs, unlockedBootCount, unlockedDurationMs)
+                .remainingUnlockMs(clockReading) > 0L
+        } else {
+            UnlockWindow.isActive(unlockedUntilMs, nowMs, unlockedDay, currentDay)
+        })
 }
 
 object UnlockWindow {

@@ -31,7 +31,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import com.inscreenlock.app.data.PinAttempt
 import com.inscreenlock.app.data.SettingsRepository
-import com.inscreenlock.app.domain.UnlockWindow
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
@@ -86,7 +85,7 @@ class UnlockActivity : ComponentActivity() {
     private fun success() {
         if (!intent.getBooleanExtra(EXTRA_CONFIRM_ONLY, false)) {
             lifecycleScope.launch {
-                repository.grantUnlock(UnlockWindow.expiresAt(System.currentTimeMillis()), LocalDate.now())
+                repository.grantUnlock(LocalDate.now())
                 setResult(RESULT_OK)
                 finish()
             }

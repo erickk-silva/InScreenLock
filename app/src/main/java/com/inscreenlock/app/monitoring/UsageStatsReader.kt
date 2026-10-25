@@ -14,6 +14,7 @@ import androidx.core.graphics.createBitmap
 import com.inscreenlock.app.domain.DailyTimeCalculator
 import com.inscreenlock.app.domain.UsageSignal
 import com.inscreenlock.app.domain.UsageTotals
+import com.inscreenlock.app.domain.UsageQuerySnapshot
 import com.inscreenlock.app.domain.UsageWindow
 import com.inscreenlock.app.domain.rankUsageByPackage
 import java.time.ZoneId
@@ -64,7 +65,6 @@ class UsageStatsReader(private val context: Context) {
                 usageEvents.getNextEvent(event)
                 signalFor(event)?.let(signals::add)
             }
-            if (signals.isEmpty()) return TodayUsageSnapshot(totals = null, apps = emptyList())
             val excludedPackages = excludedPackages()
             val durations = DailyTimeCalculator.calculateByPackage(
                 signals,
@@ -72,7 +72,8 @@ class UsageStatsReader(private val context: Context) {
                 nowMs,
                 excludedPackages,
             )
-            val totals = DailyTimeCalculator.calculate(signals, startOfDayMs, nowMs)
+            val totals = UsageQuerySnapshot.totals(true, signals, startOfDayMs, nowMs)
+                ?: return TodayUsageSnapshot(totals = null, apps = emptyList())
             val apps = rankUsageByPackage(durations, limit = Int.MAX_VALUE)
                 .map { (packageName, duration) -> appUsageEntry(packageName, duration) }
             TodayUsageSnapshot(totals, apps)

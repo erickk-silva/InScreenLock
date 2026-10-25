@@ -10,6 +10,6 @@ Orchestration: Luna 6 is the main orchestrator; investigators are read-only; exa
 
 Testing: product unit tests and instrumentation tests ARE versioned for durability in this independent new project. Private device traces, labels, screenshots, diagnostics, SDKs, generated artifacts, `.agent-harness`, and `.local-tests` are always local-only. Android gates use JUnit, Coroutines Test, Compose Test, UI Automator; Evals/A-B use Python 3 stdlib, not NestJS/Jest. Build PASS is not Android runtime proof.
 
-Safety: disabled until clear consent; no special-permission bypass; never store app content; pause is user-reversible and must not interfere with system navigation, uninstall or settings. Do not claim Reels viewed when only transition candidates were inferred. Only enable video mode on physical validation for both supported target apps.
+Safety: disabled until clear consent; no special-permission bypass; never store app content; threshold locking requires the owner's credential and must never block system navigation, settings, uninstall, or disabling Accessibility. Do not claim Reels viewed when only transition candidates were inferred. Only enable video mode on physical validation for both supported target apps.
 
 Git: private remote only after verification; avoid reset --hard, clean, force-push, rebase, broad staging and unrelated writes. Do not commit local harness, device evidence, secrets or test user data. Stop and report blockers without inventing results.

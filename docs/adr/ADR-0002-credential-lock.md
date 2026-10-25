@@ -19,3 +19,7 @@ Backup remains disabled and both backup rule formats exclude all app data, so un
 ## Consequences and limits
 
 The lock is not tamper-proof. A user can disable Accessibility, force-stop or uninstall through Android. Activity launch from an accessibility service and device-credential UI vary by Android/OEM version and require physical validation; a missing or canceled credential flow must never grant unlock. Wall-clock changes can shorten or extend the persisted 15-minute interval, so callers re-evaluate expiry at every foreground event and refresh. Local time-zone/day changes invalidate the grant.
+
+## Escopo de eventos de Acessibilidade
+
+The service receives `TYPE_WINDOW_STATE_CHANGED` events from any package so it can remove its badge or lock immediately when the foreground leaves Instagram or TikTok, including for Android system UI. It reads only `packageName`; it discards the event and does not retain its contents. Restricting `accessibilityServiceInfo.packageNames` to the two target packages and polling for foreground changes was rejected because the delayed exit detection would leave the overlay visible and add background battery use. A residual risk remains that OEM window transitions or overlay ordering may allow an overlay to escape the target window briefly; validate this on physical devices, including system navigation, settings, screen lock, and target-app exit.

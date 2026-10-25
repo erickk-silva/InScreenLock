@@ -6,6 +6,25 @@ import org.junit.Test
 
 class DailyTimeCalculatorScenariosTest {
     @Test
+    fun foregroundSwitchClearsUnclosedActivitiesFromPreviousPackage() {
+        val instagram = DailyTimeCalculator.INSTAGRAM_PACKAGE
+        val totals = DailyTimeCalculator.calculateByPackage(
+            listOf(
+                signal(0, UsageSignal.Kind.SCREEN_INTERACTIVE),
+                signal(10, UsageSignal.Kind.APP_FOREGROUND, instagram, "ActA"),
+                signal(30, UsageSignal.Kind.APP_FOREGROUND, "other.app", "Other"),
+                signal(50, UsageSignal.Kind.APP_FOREGROUND, instagram, "ActB"),
+                signal(70, UsageSignal.Kind.APP_BACKGROUND, instagram, "ActB"),
+                signal(90, UsageSignal.Kind.APP_FOREGROUND, "other.app", "Other"),
+            ),
+            windowStartMs = 0,
+            nowMs = 100,
+        )
+
+        assertEquals(40L, totals[instagram])
+    }
+
+    @Test
     fun activitySwitchInsideSameAppDoesNotResetOrDoubleCount() {
         val result = calculate(
             signal(0, UsageSignal.Kind.SCREEN_INTERACTIVE),

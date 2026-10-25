@@ -10,6 +10,9 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.inscreenlock.app.domain.ReactionMode
 import com.inscreenlock.app.domain.PinCredential
 import com.inscreenlock.app.domain.PinThrottle
+import com.inscreenlock.app.domain.ClockReading
+import com.inscreenlock.app.domain.StoredDeadline
+import com.inscreenlock.app.domain.readClock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.Base64
@@ -29,6 +32,9 @@ data class UserSettings(
     val hasPin: Boolean = false,
     val unlockedUntilMs: Long = 0L,
     val unlockedDay: String = "",
+    val unlockedElapsedUntilMs: Long = 0L,
+    val unlockedBootCount: Long = -1L,
+    val unlockedDurationMs: Long = 0L,
 )
 
 sealed interface PinAttempt {
@@ -37,8 +43,14 @@ sealed interface PinAttempt {
     data class Locked(val retryAtMs: Long) : PinAttempt
 }
 
-class SettingsRepository(context: Context) {
-    private val store = context.applicationContext.settingsStore
+class SettingsRepository(
+    context: Context,
+    private val clock: (() -> ClockReading)? = null,
+) {
+    private val appContext = context.applicationContext
+    private val store = appContext.settingsStore
+
+    fun clockReading(): ClockReading = clock?.invoke() ?: readClock(appContext)
 
     val settings: Flow<UserSettings> = store.data.onEach { values ->
         if (values[REACTION_MODE] == "PAUSE") store.edit { it[REACTION_MODE] = ReactionMode.LOCK.name }
@@ -51,6 +63,9 @@ class SettingsRepository(context: Context) {
             hasPin = values[PIN_SALT] != null && values[PIN_HASH] != null,
             unlockedUntilMs = values[UNLOCKED_UNTIL] ?: 0L,
             unlockedDay = values[UNLOCKED_DAY] ?: "",
+            unlockedElapsedUntilMs = values[UNLOCKED_ELAPSED_UNTIL] ?: 0L,
+            unlockedBootCount = values[UNLOCKED_BOOT_COUNT] ?: -1L,
+            unlockedDurationMs = values[UNLOCKED_DURATION] ?: 0L,
         )
     }
 
@@ -79,6 +94,9 @@ class SettingsRepository(context: Context) {
             it[PIN_HASH] = Base64.getEncoder().encodeToString(hash)
             it[PIN_FAILURES] = 0
             it.remove(PIN_RETRY_AT)
+            it.remove(PIN_RETRY_ELAPSED_AT)
+            it.remove(PIN_RETRY_BOOT_COUNT)
+            it.remove(PIN_RETRY_DURATION)
         }
     }
 
@@ -92,10 +110,21 @@ class SettingsRepository(context: Context) {
         }
     }
 
-    suspend fun verifyPin(pin: String, nowMs: Long = System.currentTimeMillis()): PinAttempt {
+    suspend fun verifyPin(pin: String, now: ClockReading = clockReading()): PinAttempt {
         val snapshot = store.data.first()
         val retryAt = snapshot[PIN_RETRY_AT] ?: 0L
-        if (retryAt > nowMs) return PinAttempt.Locked(retryAt)
+        val retryElapsedAt = snapshot[PIN_RETRY_ELAPSED_AT]
+        val retryBootCount = snapshot[PIN_RETRY_BOOT_COUNT]
+        val retryDeadline = if (retryElapsedAt != null && retryBootCount != null) {
+            StoredDeadline(retryAt, retryElapsedAt, retryBootCount, snapshot[PIN_RETRY_DURATION] ?: 0L)
+        } else null
+        val retryRemaining = retryDeadline?.remainingMs(now) ?: (retryAt - now.wallTimeMs).coerceAtLeast(0L)
+        if (retryRemaining > 0L) {
+            if (retryBootCount != null && retryBootCount >= 0L && now.bootCount >= 0L && retryBootCount != now.bootCount) {
+                persistRetryDeadline(StoredDeadline.after(retryRemaining, now))
+            }
+            return PinAttempt.Locked(now.wallTimeMs + retryRemaining)
+        }
         val salt = snapshot[PIN_SALT]?.let { runCatching { Base64.getDecoder().decode(it) }.getOrNull() }
         val expected = snapshot[PIN_HASH]?.let { runCatching { Base64.getDecoder().decode(it) }.getOrNull() }
         val matches = if (PinCredential.isValidFormat(pin) && salt != null && expected != null) {
@@ -105,6 +134,9 @@ class SettingsRepository(context: Context) {
             store.edit {
                 it[PIN_FAILURES] = 0
                 it.remove(PIN_RETRY_AT)
+                it.remove(PIN_RETRY_ELAPSED_AT)
+                it.remove(PIN_RETRY_BOOT_COUNT)
+                it.remove(PIN_RETRY_DURATION)
             }
             return PinAttempt.Accepted
         }
@@ -114,26 +146,48 @@ class SettingsRepository(context: Context) {
             it[PIN_FAILURES] = failures
             val delay = PinThrottle.delayAfterFailures(failures)
             if (delay > 0) {
-                nextRetry = nowMs + delay
-                it[PIN_RETRY_AT] = nextRetry
+                val deadline = StoredDeadline.after(delay, now)
+                nextRetry = deadline.wallDeadlineMs
+                it[PIN_RETRY_AT] = deadline.wallDeadlineMs
+                it[PIN_RETRY_ELAPSED_AT] = deadline.elapsedDeadlineMs
+                it[PIN_RETRY_BOOT_COUNT] = deadline.bootCount
+                it[PIN_RETRY_DURATION] = deadline.durationMs
+            } else {
+                it.remove(PIN_RETRY_AT)
+                it.remove(PIN_RETRY_ELAPSED_AT)
+                it.remove(PIN_RETRY_BOOT_COUNT)
+                it.remove(PIN_RETRY_DURATION)
             }
         }
-        return if (nextRetry > nowMs) PinAttempt.Locked(nextRetry) else PinAttempt.Rejected
+        return if (nextRetry > now.wallTimeMs) PinAttempt.Locked(nextRetry) else PinAttempt.Rejected
     }
 
-    suspend fun grantUnlock(untilMs: Long, day: LocalDate) {
+    suspend fun grantUnlock(day: LocalDate, now: ClockReading = clockReading()) {
+        val deadline = StoredDeadline.after(com.inscreenlock.app.domain.UnlockWindow.DURATION_MS, now)
         store.edit {
-            it[UNLOCKED_UNTIL] = untilMs
+            it[UNLOCKED_UNTIL] = deadline.wallDeadlineMs
+            it[UNLOCKED_ELAPSED_UNTIL] = deadline.elapsedDeadlineMs
+            it[UNLOCKED_BOOT_COUNT] = deadline.bootCount
+            it[UNLOCKED_DURATION] = deadline.durationMs
             it[UNLOCKED_DAY] = day.toString()
         }
     }
 
-    suspend fun clearExpiredUnlock(nowMs: Long, day: LocalDate) {
+    suspend fun clearExpiredUnlock(day: LocalDate, now: ClockReading = clockReading()) {
         val snapshot = store.data.first()
-        if ((snapshot[UNLOCKED_UNTIL] ?: 0L) > nowMs && snapshot[UNLOCKED_DAY] == day.toString()) return
+        val until = snapshot[UNLOCKED_UNTIL] ?: 0L
+        val elapsedUntil = snapshot[UNLOCKED_ELAPSED_UNTIL]
+        val bootCount = snapshot[UNLOCKED_BOOT_COUNT]
+        val remaining = if (elapsedUntil != null && bootCount != null) {
+            StoredDeadline(until, elapsedUntil, bootCount, snapshot[UNLOCKED_DURATION] ?: 0L).remainingUnlockMs(now)
+        } else (until - now.wallTimeMs).coerceAtLeast(0L)
+        if (remaining > 0L && snapshot[UNLOCKED_DAY] == day.toString()) return
         store.edit { values ->
-            if ((values[UNLOCKED_UNTIL] ?: 0L) <= nowMs || values[UNLOCKED_DAY] != day.toString()) {
+            if (remaining == 0L || values[UNLOCKED_DAY] != day.toString()) {
                 values.remove(UNLOCKED_UNTIL)
+                values.remove(UNLOCKED_ELAPSED_UNTIL)
+                values.remove(UNLOCKED_BOOT_COUNT)
+                values.remove(UNLOCKED_DURATION)
                 values.remove(UNLOCKED_DAY)
             }
         }
@@ -177,7 +231,22 @@ class SettingsRepository(context: Context) {
         val PIN_HASH = stringPreferencesKey("pin_hash")
         val PIN_FAILURES = intPreferencesKey("pin_failures")
         val PIN_RETRY_AT = longPreferencesKey("pin_retry_at")
+        val PIN_RETRY_ELAPSED_AT = longPreferencesKey("pin_retry_elapsed_at")
+        val PIN_RETRY_BOOT_COUNT = longPreferencesKey("pin_retry_boot_count")
+        val PIN_RETRY_DURATION = longPreferencesKey("pin_retry_duration")
         val UNLOCKED_UNTIL = longPreferencesKey("unlocked_until")
+        val UNLOCKED_ELAPSED_UNTIL = longPreferencesKey("unlocked_elapsed_until")
+        val UNLOCKED_BOOT_COUNT = longPreferencesKey("unlocked_boot_count")
+        val UNLOCKED_DURATION = longPreferencesKey("unlocked_duration")
         val UNLOCKED_DAY = stringPreferencesKey("unlocked_day")
+    }
+
+    private suspend fun persistRetryDeadline(deadline: StoredDeadline) {
+        store.edit {
+            it[PIN_RETRY_AT] = deadline.wallDeadlineMs
+            it[PIN_RETRY_ELAPSED_AT] = deadline.elapsedDeadlineMs
+            it[PIN_RETRY_BOOT_COUNT] = deadline.bootCount
+            it[PIN_RETRY_DURATION] = deadline.durationMs
+        }
     }
 }

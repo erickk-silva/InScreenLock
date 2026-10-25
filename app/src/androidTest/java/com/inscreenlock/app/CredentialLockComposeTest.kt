@@ -5,22 +5,27 @@ import androidx.activity.compose.setContent
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.inscreenlock.app.data.UserSettings
 import com.inscreenlock.app.domain.ReactionMode
 import com.inscreenlock.app.ui.SettingsScreen
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.rules.RuleChain
+import androidx.compose.ui.unit.dp
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
@@ -123,5 +128,50 @@ class CredentialLockComposeTest {
         compose.onNodeWithTag("reaction-WARNING").assertIsDisplayed().performClick()
         compose.onNodeWithText("Aviso discreto").assertIsDisplayed()
         compose.onNodeWithText("Bloqueio com senha").assertIsDisplayed()
+    }
+
+    @Test fun settingsPinFieldsMaskDigitsAndLimitInput() {
+        val savedPin = AtomicReference("")
+        compose.activity.runOnUiThread {
+            compose.activity.setContent {
+                MaterialTheme {
+                    SettingsScreen(
+                        settings = UserSettings(), usageAvailable = true, accessibilityEnabled = true, deviceSecure = false,
+                        onBack = {}, onOpenUsageSettings = {}, onOpenAccessibilitySettings = {}, onMonitoringChanged = {},
+                        onSaveBudget = { _, _ -> }, onClearLocalData = {}, onSetPin = { savedPin.set(it) }, onRemovePin = {},
+                        onAuthenticate = { it() },
+                    )
+                }
+            }
+        }
+        val pin = compose.onNodeWithTag("pin-first")
+        pin.performScrollTo().performTextInput("12345678")
+        val firstSemantics = pin.fetchSemanticsNode().config
+        assertTrue(SemanticsProperties.Password in firstSemantics)
+        assertEquals("••••••••", firstSemantics[SemanticsProperties.EditableText].text)
+        pin.performTextInput("9")
+        compose.onNodeWithTag("pin-second").performScrollTo().performTextInput("12345678")
+        val secondSemantics = compose.onNodeWithTag("pin-second").fetchSemanticsNode().config
+        assertTrue(SemanticsProperties.Password in secondSemantics)
+        assertEquals("••••••••", secondSemantics[SemanticsProperties.EditableText].text)
+        compose.onNodeWithTag("pin-save").performScrollTo().performClick()
+        assertEquals("12345678", savedPin.get())
+    }
+
+    @Test fun reactionRowsHaveAtLeastFortyEightDpTouchTargets() {
+        compose.activity.runOnUiThread {
+            compose.activity.setContent {
+                MaterialTheme {
+                    SettingsScreen(
+                        settings = UserSettings(), usageAvailable = true, accessibilityEnabled = true, deviceSecure = true,
+                        onBack = {}, onOpenUsageSettings = {}, onOpenAccessibilitySettings = {}, onMonitoringChanged = {},
+                        onSaveBudget = { _, _ -> }, onClearLocalData = {}, onSetPin = {}, onRemovePin = {},
+                        onAuthenticate = { it() },
+                    )
+                }
+            }
+        }
+        compose.onNodeWithTag("reaction-LOCK").performScrollTo().assertHeightIsAtLeast(48.dp)
+        compose.onNodeWithTag("reaction-WARNING").assertHeightIsAtLeast(48.dp)
     }
 }

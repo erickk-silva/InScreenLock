@@ -19,3 +19,4 @@ artifacts/
 *.log
 *.hprof
 InScreenLock_LUNA6_ORCHESTRATOR_PROMPT_v1.1.md
+.kotlin/

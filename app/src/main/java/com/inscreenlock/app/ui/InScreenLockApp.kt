@@ -13,10 +13,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -54,6 +56,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -261,7 +265,7 @@ private fun ConsentScreen(onContinue: () -> Unit) {
 }
 
 @Composable
-private fun DashboardScreen(
+internal fun DashboardScreen(
     settings: UserSettings,
     totals: UsageTotals?,
     appUsage: List<AppUsageEntry>?,
@@ -275,11 +279,6 @@ private fun DashboardScreen(
     val credentialAvailable = deviceSecure || settings.hasPin
     val protectionReady = usageAvailable && accessibilityEnabled && settings.monitoringEnabled &&
         (settings.reactionMode == ReactionMode.WARNING || credentialAvailable)
-    val progressColor = when (budgetLevel) {
-        BudgetLevel.ATTENTION -> Attention
-        BudgetLevel.EXCEEDED -> Exceeded
-        else -> Mint
-    }
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
     ) {
@@ -288,49 +287,7 @@ private fun DashboardScreen(
         Spacer(Modifier.height(18.dp))
         Text("Hoje", color = MainText, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(14.dp))
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.fillMaxWidth().padding(20.dp)) {
-                Text("Tempo total nos apps", color = Muted, style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    totals?.let { formatDuration(it.totalMs) } ?: "Indisponível",
-                    color = MainText,
-                    fontSize = 38.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Spacer(Modifier.height(8.dp))
-                Text("Meta diária · ${settings.dailyLimitMinutes} min", color = Muted)
-                Spacer(Modifier.height(14.dp))
-                LinearProgressIndicator(
-                    progress = {
-                        if (budgetLevel == BudgetLevel.UNAVAILABLE || totals == null) 0f
-                        else (totals.totalMs.toDouble() / (settings.dailyLimitMinutes * MINUTE_MS))
-                            .coerceAtMost(1.0).toFloat()
-                    },
-                    modifier = Modifier.fillMaxWidth().height(8.dp).semantics {
-                        contentDescription = "Progresso do limite diário"
-                    },
-                    color = progressColor,
-                )
-                Spacer(Modifier.height(8.dp))
-                val status = when (budgetLevel) {
-                    BudgetLevel.NORMAL -> "Dentro do combinado"
-                    BudgetLevel.ATTENTION -> "Atenção: perto do limite"
-                    BudgetLevel.EXCEEDED -> "Limite diário alcançado"
-                    BudgetLevel.UNAVAILABLE -> "Libere Acesso de uso para consultar o total"
-                }
-                Text(status, color = progressColor, style = MaterialTheme.typography.bodyMedium)
-                if (totals != null && budgetLevel != BudgetLevel.UNAVAILABLE) {
-                    val remaining = settings.dailyLimitMinutes * MINUTE_MS - totals.totalMs
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        if (remaining >= 0) "Restam ${formatDuration(remaining)}"
-                        else "${formatDuration(-remaining)} acima da meta",
-                        color = Muted,
-                    )
-                }
-            }
-        }
+        DashboardBudgetCard(settings, totals, budgetLevel)
         Spacer(Modifier.height(14.dp))
         AppBreakdownCard("Instagram", totals?.instagramMs)
         Spacer(Modifier.height(10.dp))
@@ -445,6 +402,58 @@ private fun AppUsageRow(entry: AppUsageEntry) {
 }
 
 @Composable
+internal fun DashboardBudgetCard(settings: UserSettings, totals: UsageTotals?, budgetLevel: BudgetLevel) {
+    val progressColor = when (budgetLevel) {
+        BudgetLevel.ATTENTION -> Attention
+        BudgetLevel.EXCEEDED -> Exceeded
+        else -> Mint
+    }
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().padding(20.dp)) {
+            Text("Tempo total nos apps", color = Muted, style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                totals?.let { formatDuration(it.totalMs) } ?: "Indisponível",
+                color = MainText,
+                fontSize = 38.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text("Meta diária · ${settings.dailyLimitMinutes} min", color = Muted)
+            Spacer(Modifier.height(14.dp))
+            LinearProgressIndicator(
+                progress = {
+                    if (budgetLevel == BudgetLevel.UNAVAILABLE || totals == null) 0f
+                    else (totals.totalMs.toDouble() / (settings.dailyLimitMinutes * MINUTE_MS))
+                        .coerceAtMost(1.0).toFloat()
+                },
+                modifier = Modifier.fillMaxWidth().height(8.dp).semantics {
+                    contentDescription = "Progresso do limite diário"
+                },
+                color = progressColor,
+            )
+            Spacer(Modifier.height(8.dp))
+            val status = when (budgetLevel) {
+                BudgetLevel.NORMAL -> "Dentro do combinado"
+                BudgetLevel.ATTENTION -> "Atenção: perto do limite"
+                BudgetLevel.EXCEEDED -> "Limite diário alcançado"
+                BudgetLevel.UNAVAILABLE -> "Libere Acesso de uso para consultar o total"
+            }
+            Text(status, color = progressColor, style = MaterialTheme.typography.bodyMedium)
+            if (totals != null && budgetLevel != BudgetLevel.UNAVAILABLE) {
+                val remaining = settings.dailyLimitMinutes * MINUTE_MS - totals.totalMs
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    if (remaining >= 0) "Restam ${formatDuration(remaining)}"
+                    else "${formatDuration(-remaining)} acima da meta",
+                    color = Muted,
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun AppBreakdownCard(name: String, usedMs: Long?) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -523,20 +532,23 @@ internal fun SettingsScreen(
                 Text("Conta o tempo total com Instagram e TikTok abertos e a tela ativa.", color = Muted)
                 Spacer(Modifier.height(8.dp))
                 Text("Ao atingir o limite", color = MainText)
-                ReactionMode.entries.forEach { option ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().selectable(
-                            selected = reaction == option,
-                            role = Role.RadioButton,
-                            onClick = { reaction = option },
-                        ).testTag("reaction-${option.name}"),
-                    ) {
-                        RadioButton(selected = reaction == option, onClick = null)
-                        Text(
-                            if (option == ReactionMode.WARNING) "Aviso discreto" else "Bloqueio com senha",
-                            color = MainText,
-                        )
+                Column(Modifier.selectableGroup()) {
+                    ReactionMode.entries.forEach { option ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(
+                                selected = reaction == option,
+                                role = Role.RadioButton,
+                                onClick = { reaction = option },
+                            ).testTag("reaction-${option.name}"),
+                        ) {
+                            RadioButton(selected = reaction == option, onClick = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                if (option == ReactionMode.WARNING) "Aviso discreto" else "Bloqueio com senha",
+                                color = MainText,
+                            )
+                        }
                     }
                 }
                 Button(
@@ -566,7 +578,12 @@ internal fun SettingsScreen(
                     value = pinFirst,
                     onValueChange = { if (it.length <= 8 && it.all { char -> char in '0'..'9' }) pinFirst = it },
                     label = { Text(if (settings.hasPin) "Novo PIN (4–8 dígitos)" else "Definir PIN (4–8 dígitos)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.NumberPassword,
+                        capitalization = KeyboardCapitalization.None,
+                        autoCorrectEnabled = false,
+                    ),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().testTag("pin-first"),
                 )
@@ -574,7 +591,12 @@ internal fun SettingsScreen(
                     value = pinSecond,
                     onValueChange = { if (it.length <= 8 && it.all { char -> char in '0'..'9' }) pinSecond = it },
                     label = { Text("Digite o PIN novamente") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.NumberPassword,
+                        capitalization = KeyboardCapitalization.None,
+                        autoCorrectEnabled = false,
+                    ),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().testTag("pin-second"),
                 )
