@@ -39,6 +39,19 @@ class CredentialLockPolicyTest {
         assertFalse(ProtectedChange.requiresAuthentication(ProtectedChange.SetFirstPin))
     }
 
+    @Test fun protectedChangesRequireAuthenticationOnlyWhenCredentialIsAvailable() {
+        assertFalse(ProtectedChange.requiresAuthentication(ProtectedChange.DisableMonitoring, credentialAvailable = false))
+        assertFalse(ProtectedChange.requiresAuthentication(ProtectedChange.IncreaseLimit, credentialAvailable = false))
+        assertFalse(ProtectedChange.requiresAuthentication(ProtectedChange.LockToWarning, credentialAvailable = false))
+        assertFalse(ProtectedChange.requiresAuthentication(ProtectedChange.ClearData, credentialAvailable = false))
+        assertFalse(ProtectedChange.requiresAuthentication(ProtectedChange.ChangeOrRemovePin, credentialAvailable = false))
+        assertTrue(ProtectedChange.requiresAuthentication(ProtectedChange.DisableMonitoring, credentialAvailable = true))
+        assertTrue(ProtectedChange.requiresAuthentication(ProtectedChange.IncreaseLimit, credentialAvailable = true))
+        assertTrue(ProtectedChange.requiresAuthentication(ProtectedChange.LockToWarning, credentialAvailable = true))
+        assertTrue(ProtectedChange.requiresAuthentication(ProtectedChange.ClearData, credentialAvailable = true))
+        assertTrue(ProtectedChange.requiresAuthentication(ProtectedChange.ChangeOrRemovePin, credentialAvailable = true))
+    }
+
     @Test fun pinDerivationAndVerificationAreSaltedAndConstantTimeChecked() {
         val salt = ByteArray(16) { it.toByte() }
         val first = PinCredential.derive("1234", salt)

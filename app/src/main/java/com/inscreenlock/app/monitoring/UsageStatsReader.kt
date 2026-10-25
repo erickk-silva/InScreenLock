@@ -17,6 +17,7 @@ import com.inscreenlock.app.domain.UsageTotals
 import com.inscreenlock.app.domain.UsageQuerySnapshot
 import com.inscreenlock.app.domain.UsageWindow
 import com.inscreenlock.app.domain.rankUsageByPackage
+import com.inscreenlock.app.domain.recentForegroundPackage
 import java.time.ZoneId
 import java.util.concurrent.ConcurrentHashMap
 
@@ -86,20 +87,13 @@ class UsageStatsReader(private val context: Context) {
             ?: return null
         return runCatching {
             val usageEvents = manager.queryEvents(nowMs - FOREGROUND_LOOKBACK_MS, nowMs) ?: return null
-            var foregroundPackage: String? = null
+            val signals = mutableListOf<UsageSignal>()
             val event = UsageEvents.Event()
             while (usageEvents.hasNextEvent()) {
                 usageEvents.getNextEvent(event)
-                val signal = signalFor(event) ?: continue
-                when (signal.kind) {
-                    UsageSignal.Kind.APP_FOREGROUND -> foregroundPackage = signal.packageName
-                    UsageSignal.Kind.APP_BACKGROUND -> {
-                        if (foregroundPackage == signal.packageName) foregroundPackage = null
-                    }
-                    else -> Unit
-                }
+                signalFor(event)?.let(signals::add)
             }
-            foregroundPackage
+            recentForegroundPackage(signals)
         }.getOrNull()
     }
 
@@ -175,6 +169,6 @@ class UsageStatsReader(private val context: Context) {
     private companion object {
         const val SYSTEM_UI_PACKAGE = "com.android.systemui"
         const val ICON_SIZE_PX = 96
-        const val FOREGROUND_LOOKBACK_MS = 24 * 60 * 60 * 1000L
+        const val FOREGROUND_LOOKBACK_MS = 15 * 60 * 1000L
     }
 }

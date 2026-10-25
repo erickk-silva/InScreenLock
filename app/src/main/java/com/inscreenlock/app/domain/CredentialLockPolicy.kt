@@ -60,6 +60,12 @@ enum class ProtectedChange {
         fun requiresAuthentication(change: ProtectedChange): Boolean = change in setOf(
             DisableMonitoring, IncreaseLimit, LockToWarning, ClearData, ChangeOrRemovePin,
         )
+
+        fun requiresAuthentication(change: ProtectedChange, credentialAvailable: Boolean): Boolean =
+            credentialAvailable && requiresAuthentication(change)
+
+        fun requiresConfirmation(change: ProtectedChange, credentialAvailable: Boolean): Boolean =
+            !credentialAvailable && requiresAuthentication(change)
     }
 }
 

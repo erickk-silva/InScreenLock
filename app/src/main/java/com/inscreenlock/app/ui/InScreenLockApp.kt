@@ -70,6 +70,7 @@ import com.inscreenlock.app.data.SettingsRepository
 import com.inscreenlock.app.data.UserSettings
 import com.inscreenlock.app.domain.BudgetEvaluator
 import com.inscreenlock.app.domain.BudgetLevel
+import com.inscreenlock.app.domain.ProtectedChange
 import com.inscreenlock.app.domain.ReactionMode
 import com.inscreenlock.app.domain.UsageTotals
 import com.inscreenlock.app.domain.formatUsageDuration
@@ -486,9 +487,18 @@ internal fun SettingsScreen(
     var limitText by remember(settings.dailyLimitMinutes) { mutableStateOf(settings.dailyLimitMinutes.toString()) }
     var reaction by remember(settings.reactionMode) { mutableStateOf(settings.reactionMode) }
     var showClearConfirmation by remember { mutableStateOf(false) }
+    var pendingConfirmation by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
     var pinFirst by remember { mutableStateOf("") }
     var pinSecond by remember { mutableStateOf("") }
     var pinError by remember { mutableStateOf("") }
+    val credentialAvailable = deviceSecure || settings.hasPin
+    val protectChange: (ProtectedChange, String, () -> Unit) -> Unit = { change, description, action ->
+        when {
+            ProtectedChange.requiresAuthentication(change, credentialAvailable) -> onAuthenticate(action)
+            ProtectedChange.requiresConfirmation(change, credentialAvailable) -> pendingConfirmation = description to action
+            else -> action()
+        }
+    }
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
@@ -555,9 +565,19 @@ internal fun SettingsScreen(
                     onClick = {
                         limitText.toIntOrNull()?.takeIf { it > 0 }?.let { minutes ->
                             val save = { onSaveBudget(minutes, reaction) }
-                            if (minutes > settings.dailyLimitMinutes ||
-                                settings.reactionMode == ReactionMode.LOCK && reaction == ReactionMode.WARNING
-                            ) onAuthenticate(save) else save()
+                            when {
+                                minutes > settings.dailyLimitMinutes -> protectChange(
+                                    ProtectedChange.IncreaseLimit,
+                                    "Sem credencial configurada, o bloqueio por limite está indisponível. Deseja aumentar o limite?",
+                                    save,
+                                )
+                                settings.reactionMode == ReactionMode.LOCK && reaction == ReactionMode.WARNING -> protectChange(
+                                    ProtectedChange.LockToWarning,
+                                    "Sem credencial configurada, o bloqueio por limite está indisponível. Deseja trocar para aviso?",
+                                    save,
+                                )
+                                else -> save()
+                            }
                         }
                     },
                     enabled = limitText.toIntOrNull()?.let { it > 0 } == true,
@@ -608,7 +628,11 @@ internal fun SettingsScreen(
                     else -> {
                             val pinToSave = pinFirst
                             val save = { onSetPin(pinToSave) }
-                            if (settings.hasPin) onAuthenticate(save) else save()
+                            if (settings.hasPin) protectChange(
+                                ProtectedChange.ChangeOrRemovePin,
+                                "Deseja alterar o PIN?",
+                                save,
+                            ) else save()
                             pinFirst = ""; pinSecond = ""; pinError = ""
                         }
                         }
@@ -616,7 +640,12 @@ internal fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth().testTag("pin-save"),
                 ) { Text(if (settings.hasPin) "Alterar PIN" else "Definir PIN") }
                 if (settings.hasPin) {
-                    OutlinedButton(onClick = { onAuthenticate { onRemovePin(deviceSecure) } }, modifier = Modifier.fillMaxWidth().testTag("pin-remove")) { Text("Remover PIN") }
+                    OutlinedButton(onClick = {
+                        protectChange(
+                            ProtectedChange.ChangeOrRemovePin,
+                            "Deseja remover o PIN?",
+                        ) { onRemovePin(deviceSecure) }
+                    }, modifier = Modifier.fillMaxWidth().testTag("pin-remove")) { Text("Remover PIN") }
                 }
                 if (pinError.isNotEmpty()) Text(pinError, color = Exceeded, modifier = Modifier.testTag("pin-error"))
             }
@@ -647,7 +676,12 @@ internal fun SettingsScreen(
             }
         }
         Spacer(Modifier.height(14.dp))
-        OutlinedButton(onClick = { onAuthenticate { onMonitoringChanged(false) } }, modifier = Modifier.fillMaxWidth().testTag("disable-monitoring")) {
+        OutlinedButton(onClick = {
+            protectChange(
+                ProtectedChange.DisableMonitoring,
+                "Sem credencial configurada, o bloqueio por limite está indisponível. Deseja desativar o monitoramento?",
+            ) { onMonitoringChanged(false) }
+        }, modifier = Modifier.fillMaxWidth().testTag("disable-monitoring")) {
             Text("Desativar monitoramento")
         }
         OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Voltar") }
@@ -660,10 +694,31 @@ internal fun SettingsScreen(
             title = { Text("Apagar preferências?") },
             text = { Text("O consentimento e as configurações locais serão removidos.") },
             confirmButton = {
-                Button(onClick = { showClearConfirmation = false; onAuthenticate(onClearLocalData) }) { Text("Apagar") }
+                Button(onClick = {
+                    showClearConfirmation = false
+                    if (ProtectedChange.requiresAuthentication(ProtectedChange.ClearData, credentialAvailable)) {
+                        onAuthenticate(onClearLocalData)
+                    } else {
+                        onClearLocalData()
+                    }
+                }) { Text("Apagar") }
             },
             dismissButton = {
                 OutlinedButton(onClick = { showClearConfirmation = false }) { Text("Cancelar") }
+            },
+        )
+    }
+
+    pendingConfirmation?.let { (message, action) ->
+        AlertDialog(
+            onDismissRequest = { pendingConfirmation = null },
+            title = { Text("Confirmar alteração") },
+            text = { Text(message) },
+            confirmButton = {
+                Button(onClick = { pendingConfirmation = null; action() }) { Text("Confirmar") }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { pendingConfirmation = null }) { Text("Cancelar") }
             },
         )
     }

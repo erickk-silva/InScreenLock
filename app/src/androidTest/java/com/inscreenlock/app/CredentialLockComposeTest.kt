@@ -111,6 +111,35 @@ class CredentialLockComposeTest {
         assertEquals(45, savedLimit.get())
     }
 
+    @Test fun disablingMonitoringWithoutCredentialUsesConfirmationInsteadOfAuthentication() {
+        val authenticationCount = AtomicInteger()
+        val disabledCount = AtomicInteger()
+        compose.activity.runOnUiThread {
+            compose.activity.setContent {
+                MaterialTheme {
+                    SettingsScreen(
+                        settings = UserSettings(monitoringEnabled = true, hasPin = false),
+                        usageAvailable = true,
+                        accessibilityEnabled = true,
+                        deviceSecure = false,
+                        onBack = {}, onOpenUsageSettings = {}, onOpenAccessibilitySettings = {},
+                        onMonitoringChanged = { if (!it) disabledCount.incrementAndGet() },
+                        onSaveBudget = { _, _ -> }, onClearLocalData = {}, onSetPin = {}, onRemovePin = {},
+                        onAuthenticate = { authenticationCount.incrementAndGet(); it() },
+                    )
+                }
+            }
+        }
+        compose.onNodeWithTag("disable-monitoring").performScrollTo().performClick()
+        compose.onNodeWithText("Confirmar").assertIsDisplayed()
+        assertEquals(0, authenticationCount.get())
+        assertEquals(0, disabledCount.get())
+        compose.onNodeWithText("Confirmar").performClick()
+        compose.waitForIdle()
+        assertEquals(0, authenticationCount.get())
+        assertEquals(1, disabledCount.get())
+    }
+
     @Test fun reactionSelectionOffersLockAndWarning() {
         compose.activity.runOnUiThread {
             compose.activity.setContent {

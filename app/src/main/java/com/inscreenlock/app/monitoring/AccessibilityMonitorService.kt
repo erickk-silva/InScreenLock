@@ -26,7 +26,6 @@ import com.inscreenlock.app.domain.BudgetEvaluator
 import com.inscreenlock.app.domain.BudgetLevel
 import com.inscreenlock.app.domain.BadgeStatus
 import com.inscreenlock.app.domain.DailyTimeCalculator
-import com.inscreenlock.app.domain.ForegroundResolver
 import com.inscreenlock.app.domain.MonitoringGate
 import com.inscreenlock.app.domain.ReactionMode
 import com.inscreenlock.app.domain.LockPolicy
@@ -48,7 +47,8 @@ class AccessibilityMonitorService : AccessibilityService() {
     private lateinit var usageStatsReader: UsageStatsReader
     private lateinit var windowManager: WindowManager
     private var currentSettings = UserSettings()
-    private var currentTargetPackage: String? = null
+    private var sessionController: OverlaySessionController? = null
+    private val currentTargetPackage: String? get() = sessionController?.targetPackage
     private var overlay: View? = null
     private var overlayIsLock = false
     private var refreshJob: kotlinx.coroutines.Job? = null
@@ -56,6 +56,7 @@ class AccessibilityMonitorService : AccessibilityService() {
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == Intent.ACTION_SCREEN_OFF) {
+                sessionController?.reset()
                 refreshJob?.cancel()
                 removeOverlay()
             }
@@ -67,6 +68,10 @@ class AccessibilityMonitorService : AccessibilityService() {
         settingsRepository = SettingsRepository(this)
         usageStatsReader = UsageStatsReader(this)
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+        sessionController = OverlaySessionController(object : OverlaySessionHost {
+            override fun show() = Unit
+            override fun remove() = removeOverlayView()
+        })
         ContextCompat.registerReceiver(
             this,
             screenReceiver,
@@ -77,7 +82,7 @@ class AccessibilityMonitorService : AccessibilityService() {
             settingsRepository.settings.collect { settings ->
                 currentSettings = settings
                 if (!settings.accessibilityDisclosureAccepted || !settings.monitoringEnabled) {
-                    currentTargetPackage = null
+                    sessionController?.reset()
                     refreshJob?.cancel()
                     removeOverlay()
                 }
@@ -92,29 +97,27 @@ class AccessibilityMonitorService : AccessibilityService() {
                 usageAccess = usageStatsReader.hasUsageAccess(),
             )
         ) {
-            currentTargetPackage = null
+            sessionController?.reset()
             removeOverlay()
             return
         }
         val packageName = event?.packageName?.toString()
-        val resolution = ForegroundResolver.resolveWindowEvent(
+        val previousTarget = currentTargetPackage
+        val resolution = sessionController?.onWindowEvent(
             eventPackage = packageName,
             transientPackages = transientPackages(),
-            currentTargetPackage = currentTargetPackage,
-        )
+        ) ?: return
         val targetPackage = resolution.targetPackage
         if (resolution.transientWindow) {
-            currentTargetPackage = targetPackage
             removeOverlay()
             startRefreshLoop(TRANSIENT_RECONFIRM_DELAY_MS)
             return
         }
-        if (targetPackage == currentTargetPackage) {
+        if (targetPackage == previousTarget) {
             if (targetPackage != null && refreshJob?.isActive != true) startRefreshLoop()
             return
         }
-        currentTargetPackage = targetPackage
-        if (currentTargetPackage == null) {
+        if (targetPackage == null) {
             refreshJob?.cancel()
             removeOverlay()
         } else {
@@ -143,14 +146,14 @@ class AccessibilityMonitorService : AccessibilityService() {
     }
 
     override fun onInterrupt() {
-        currentTargetPackage = null
+        sessionController?.reset()
         refreshJob?.cancel()
         removeOverlay()
     }
 
     override fun onDestroy() {
         runCatching { unregisterReceiver(screenReceiver) }
-        currentTargetPackage = null
+        sessionController?.reset()
         refreshJob?.cancel()
         removeOverlay()
         serviceScope.cancel()
@@ -162,9 +165,8 @@ class AccessibilityMonitorService : AccessibilityService() {
         val transientPackages = transientPackages()
         val usageForeground = withContext(Dispatchers.IO) { usageStatsReader.recentForegroundPackage() }
         if (currentTargetPackage != targetPackage) return
-        when (ForegroundResolver.resolveUsageStats(targetPackage, usageForeground, transientPackages)) {
+        when (sessionController?.reconfirmUsage(usageForeground, transientPackages)) {
             false -> {
-                currentTargetPackage = null
                 removeOverlay()
                 return
             }
@@ -253,7 +255,7 @@ class AccessibilityMonitorService : AccessibilityService() {
             background = roundedBackground(Color.argb(235, 27, 32, 41))
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
         }
-        addOverlay(badge, pause = false)
+        presentOverlay { addOverlay(badge, pause = false) }
     }
 
     private fun showLock(totalMs: Long, limitMinutes: Int, hasPin: Boolean) {
@@ -276,10 +278,14 @@ class AccessibilityMonitorService : AccessibilityService() {
                 startActivity(UnlockActivity.intent(this, confirmOnly = false, hasPin = hasPin).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             },
         )
-        addOverlay(panel, pause = true)
+        presentOverlay { addOverlay(panel, pause = true) }
     }
 
-    private fun addOverlay(view: View, pause: Boolean) {
+    private fun presentOverlay(show: () -> Boolean) {
+        sessionController?.presentOverlay(show) ?: show()
+    }
+
+    private fun addOverlay(view: View, pause: Boolean): Boolean {
         val params = WindowManager.LayoutParams(
             if (pause) WindowManager.LayoutParams.MATCH_PARENT else WindowManager.LayoutParams.WRAP_CONTENT,
             if (pause) WindowManager.LayoutParams.MATCH_PARENT else WindowManager.LayoutParams.WRAP_CONTENT,
@@ -300,9 +306,14 @@ class AccessibilityMonitorService : AccessibilityService() {
                 overlay = view
                 overlayIsLock = pause
             }
+        return overlay === view
     }
 
     private fun removeOverlay() {
+        sessionController?.hideOverlay() ?: removeOverlayView()
+    }
+
+    private fun removeOverlayView() {
         overlay?.let { view -> runCatching { windowManager.removeView(view) } }
         overlay = null
         overlayIsLock = false
