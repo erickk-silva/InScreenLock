@@ -30,7 +30,7 @@ class UsageStatsReader(private val context: Context) {
             ?: return null
 
         return runCatching {
-            val usageEvents = manager.queryEvents(startOfDayMs, nowMs) ?: return null
+            val usageEvents = manager.queryEvents(UsageWindow.queryStartMs(startOfDayMs), nowMs) ?: return null
             val signals = mutableListOf<UsageSignal>()
             val event = UsageEvents.Event()
             while (usageEvents.hasNextEvent()) {
@@ -62,7 +62,7 @@ class UsageStatsReader(private val context: Context) {
             UsageSignal.Kind.APP_FOREGROUND, UsageSignal.Kind.APP_BACKGROUND -> event.packageName
             else -> null
         }
-        return UsageSignal(event.timeStamp, kind, packageName)
+        return UsageSignal(event.timeStamp, kind, packageName, event.className)
     }
 
     @Suppress("DEPRECATION")

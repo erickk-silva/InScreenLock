@@ -6,10 +6,10 @@ Aplicativo Android offline para acompanhar o tempo total com Instagram e TikTok 
 
 - O monitoramento começa desativado. A tela inicial explica o uso do serviço e exige uma confirmação explícita antes de abrir as configurações de Acessibilidade.
 - O Android concede Acesso de uso e Acessibilidade somente nas próprias configurações do sistema. O aplicativo não tenta ativar, contornar ou ocultar essas permissões.
-- O serviço pede apenas eventos de mudança de janela e não acessa a árvore visual. Com monitoramento e Acesso de uso autorizados, usa temporariamente o nome do pacote em primeiro plano para mostrar o contador nos dois aplicativos suportados.
+- O serviço recebe notificações de mudança de janela de qualquer aplicativo apenas para identificar quando Instagram ou TikTok entram ou saem do primeiro plano. Lê somente o nome do pacote, descarta os demais e não guarda nomes de pacote nem notificações. Não acessa a árvore visual.
 - A duração diária é recalculada a partir de `UsageStatsManager` e dos limites do dia local. Preferências e o estado numérico do aviso diário ficam no DataStore. Nenhum texto, imagem, mensagem, legenda, perfil ou histórico de eventos dos aplicativos é guardado.
 - O manifesto não declara Internet, leitura de notificações, janela de alerta do sistema, serviço em primeiro plano ou consulta de todos os pacotes.
-- A pausa é voluntária e reversível. A navegação do sistema e o acesso às configurações continuam sob controle do Android e da pessoa usuária.
+- A pausa voluntária cobre toda a janela do Instagram ou TikTok, inclusive telas internas como login, e oferece ações para abrir Início e Configurações do InScreenLock. Home, Voltar e notificações do sistema ainda não foram validados em aparelho físico.
 - Este APK privado não foi submetido à revisão de acessibilidade da Google Play; uma distribuição pela loja exigirá declaração e revisão próprias.
 
 ## Escopo do MVP

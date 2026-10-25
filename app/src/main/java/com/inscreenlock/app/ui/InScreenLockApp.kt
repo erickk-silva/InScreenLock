@@ -186,8 +186,11 @@ private fun ConsentScreen(onContinue: () -> Unit) {
         )
         Spacer(Modifier.height(12.dp))
         Text(
-            "A Acessibilidade pode acessar informações visíveis na tela. O InScreenLock usa somente o app em " +
-                "primeiro plano para mostrar seu contador e, se você escolher, uma pausa reversível.",
+            "O serviço recebe notificações de mudança de janela de qualquer app e lê somente o nome do pacote " +
+                "para identificar quando Instagram ou TikTok entram ou saem do primeiro plano. Os demais pacotes " +
+                "são descartados, e nada disso é guardado. A pausa cobre toda a janela do app, inclusive telas " +
+                "internas como login, e oferece Início e Configurações. Home, Voltar e notificações do sistema " +
+                "ainda não foram validados em aparelho físico.",
             color = Muted,
             style = MaterialTheme.typography.bodyLarge,
         )
@@ -425,9 +428,13 @@ private fun SettingsScreen(
                 Text("Privacidade", color = MainText, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Sem conta, rede ou anúncios. Guardamos apenas suas preferências e o estado local do aviso diário; " +
-                        "o tempo é consultado no histórico de uso do Android. Não armazenamos conteúdo dos apps. " +
-                        "Este APK privado ainda não passou por revisão de acessibilidade da Google Play.",
+                    "Sem conta, rede ou anúncios. O serviço recebe notificações de mudança de janela de qualquer app " +
+                        "e lê apenas o nome do pacote para reconhecer entradas e saídas do Instagram/TikTok; " +
+                        "descarta os demais e não guarda esses dados. Guardamos preferências e o maior limite já " +
+                        "avisado no dia; o tempo vem do histórico de uso do Android. A pausa cobre a janela inteira " +
+                        "do app, inclusive login, e oferece Início e Configurações. Home, Voltar e notificações do " +
+                        "sistema não foram validados em aparelho físico. Este APK privado ainda não passou por " +
+                        "revisão de acessibilidade da Google Play.",
                     color = Muted,
                 )
                 Spacer(Modifier.height(10.dp))

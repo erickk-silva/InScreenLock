@@ -4,6 +4,7 @@ data class UsageSignal(
     val timestampMs: Long,
     val kind: Kind,
     val packageName: String? = null,
+    val activityName: String? = null,
 ) {
     enum class Kind {
         APP_FOREGROUND,
@@ -34,6 +35,7 @@ object DailyTimeCalculator {
         if (nowMs <= windowStartMs) return UsageTotals()
 
         var foregroundPackage: String? = null
+        val activeActivities = mutableMapOf<String, MutableSet<String>>()
         var interactive = false
         var keyguardVisible = false
         var cursorMs = windowStartMs
@@ -55,10 +57,25 @@ object DailyTimeCalculator {
 
             when (event.kind) {
                 UsageSignal.Kind.APP_FOREGROUND -> {
-                    foregroundPackage = event.packageName?.takeIf(::isTargetPackage)
+                    val packageName = event.packageName?.takeIf(::isTargetPackage)
+                    if (packageName == null) {
+                        foregroundPackage = null
+                    } else {
+                        activeActivities.getOrPut(packageName) { mutableSetOf() }
+                            .add(event.activityName ?: packageName)
+                        foregroundPackage = packageName
+                    }
                 }
                 UsageSignal.Kind.APP_BACKGROUND -> {
-                    if (event.packageName == foregroundPackage) foregroundPackage = null
+                    val packageName = event.packageName
+                    if (packageName != null) {
+                        val activities = activeActivities[packageName]
+                        activities?.remove(event.activityName ?: packageName)
+                        if (activities.isNullOrEmpty()) activeActivities.remove(packageName)
+                        if (packageName == foregroundPackage && activities.isNullOrEmpty()) {
+                            foregroundPackage = null
+                        }
+                    }
                 }
                 UsageSignal.Kind.SCREEN_INTERACTIVE -> interactive = true
                 UsageSignal.Kind.SCREEN_NON_INTERACTIVE -> interactive = false

@@ -53,10 +53,18 @@ class SettingsRepository(context: Context) {
     suspend fun claimThresholdWarning(day: LocalDate, limitMinutes: Int): Boolean {
         var claimed = false
         store.edit { values ->
-            val alreadyClaimed = values[WARNING_DAY] == day.toString() &&
-                values[WARNING_LIMIT_MINUTES] == limitMinutes
-            if (!alreadyClaimed) {
+            val sameDay = values[WARNING_DAY] == day.toString()
+            val previousMaximum = if (sameDay) {
+                maxOf(
+                    values[WARNING_MAX_LIMIT_MINUTES] ?: 0,
+                    values[WARNING_LIMIT_MINUTES] ?: 0,
+                )
+            } else {
+                0
+            }
+            if (limitMinutes > previousMaximum) {
                 values[WARNING_DAY] = day.toString()
+                values[WARNING_MAX_LIMIT_MINUTES] = limitMinutes
                 values[WARNING_LIMIT_MINUTES] = limitMinutes
                 claimed = true
             }
@@ -75,5 +83,6 @@ class SettingsRepository(context: Context) {
         val REACTION_MODE = stringPreferencesKey("reaction_mode")
         val WARNING_DAY = stringPreferencesKey("warning_day")
         val WARNING_LIMIT_MINUTES = intPreferencesKey("warning_limit_minutes")
+        val WARNING_MAX_LIMIT_MINUTES = intPreferencesKey("warning_max_limit_minutes")
     }
 }
