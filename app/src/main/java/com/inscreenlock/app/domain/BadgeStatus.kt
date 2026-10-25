@@ -9,7 +9,7 @@ object BadgeStatus {
     }
 
     fun format(level: BudgetLevel, timeLabel: String, lockUnavailable: Boolean = false): String = when {
-        lockUnavailable -> "Bloqueio indisponível · Aviso"
+        lockUnavailable -> "Bloqueio indisponível · ${text(level)} · $timeLabel"
         level == BudgetLevel.NORMAL -> timeLabel
         else -> "${text(level)} · $timeLabel"
     }

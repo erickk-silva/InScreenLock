@@ -16,5 +16,9 @@ class UsageAndBadgeTest {
         assertEquals("", BadgeStatus.text(BudgetLevel.NORMAL))
         assertEquals("Atenção · 24 / 30 min", BadgeStatus.format(BudgetLevel.ATTENTION, "24 / 30 min"))
         assertEquals("Limite excedido · 31 / 30 min", BadgeStatus.format(BudgetLevel.EXCEEDED, "31 / 30 min"))
+        assertEquals(
+            "Bloqueio indisponível · Limite excedido · 39 min / 30 min",
+            BadgeStatus.format(BudgetLevel.EXCEEDED, "39 min / 30 min", lockUnavailable = true),
+        )
     }
 }

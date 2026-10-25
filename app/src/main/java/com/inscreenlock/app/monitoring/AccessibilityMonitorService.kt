@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
+import android.view.inputmethod.InputMethodManager
 import android.os.PowerManager
 import android.view.Gravity
 import android.view.View
@@ -25,6 +26,7 @@ import com.inscreenlock.app.domain.BudgetEvaluator
 import com.inscreenlock.app.domain.BudgetLevel
 import com.inscreenlock.app.domain.BadgeStatus
 import com.inscreenlock.app.domain.DailyTimeCalculator
+import com.inscreenlock.app.domain.ForegroundResolver
 import com.inscreenlock.app.domain.MonitoringGate
 import com.inscreenlock.app.domain.ReactionMode
 import com.inscreenlock.app.domain.LockPolicy
@@ -95,7 +97,18 @@ class AccessibilityMonitorService : AccessibilityService() {
             return
         }
         val packageName = event?.packageName?.toString()
-        val targetPackage = packageName?.takeIf(::isSupportedPackage)
+        val resolution = ForegroundResolver.resolveWindowEvent(
+            eventPackage = packageName,
+            transientPackages = transientPackages(),
+            currentTargetPackage = currentTargetPackage,
+        )
+        val targetPackage = resolution.targetPackage
+        if (resolution.transientWindow) {
+            currentTargetPackage = targetPackage
+            removeOverlay()
+            startRefreshLoop(TRANSIENT_RECONFIRM_DELAY_MS)
+            return
+        }
         if (targetPackage == currentTargetPackage) {
             if (targetPackage != null && refreshJob?.isActive != true) startRefreshLoop()
             return
@@ -109,13 +122,23 @@ class AccessibilityMonitorService : AccessibilityService() {
         }
     }
 
-    private fun startRefreshLoop() {
+    private fun startRefreshLoop(initialDelayMs: Long = 0L) {
         refreshJob?.cancel()
         refreshJob = serviceScope.launch {
+            if (initialDelayMs > 0) delay(initialDelayMs)
             while (isActive && currentTargetPackage != null) {
                 refreshOverlay()
-                delay(REFRESH_INTERVAL_MS)
+                if (currentTargetPackage != null) delay(REFRESH_INTERVAL_MS)
             }
+        }
+    }
+
+    private fun transientPackages(): Set<String> = buildSet {
+        add(SYSTEM_UI_PACKAGE)
+        runCatching {
+            (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager)
+                .enabledInputMethodList
+                .mapTo(this) { it.packageName }
         }
     }
 
@@ -136,6 +159,22 @@ class AccessibilityMonitorService : AccessibilityService() {
 
     private suspend fun refreshOverlay() {
         val targetPackage = currentTargetPackage ?: return
+        val transientPackages = transientPackages()
+        val usageForeground = withContext(Dispatchers.IO) { usageStatsReader.recentForegroundPackage() }
+        if (currentTargetPackage != targetPackage) return
+        when (ForegroundResolver.resolveUsageStats(targetPackage, usageForeground, transientPackages)) {
+            false -> {
+                currentTargetPackage = null
+                removeOverlay()
+                return
+            }
+            true -> Unit
+            null -> if (usageForeground in transientPackages) {
+                removeOverlay()
+                return
+            }
+        }
+
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
         val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
         if (!powerManager.isInteractive || keyguardManager.isKeyguardLocked) {
@@ -279,12 +318,10 @@ class AccessibilityMonitorService : AccessibilityService() {
 
     private fun formatMinutes(milliseconds: Long): String = "${milliseconds / MINUTE_MS} min"
 
-    private fun isSupportedPackage(packageName: String): Boolean =
-        packageName == DailyTimeCalculator.INSTAGRAM_PACKAGE ||
-            packageName == DailyTimeCalculator.TIKTOK_PACKAGE
-
     private companion object {
         const val REFRESH_INTERVAL_MS = 10_000L
+        const val TRANSIENT_RECONFIRM_DELAY_MS = 1_500L
         const val MINUTE_MS = 60_000L
+        const val SYSTEM_UI_PACKAGE = "com.android.systemui"
     }
 }

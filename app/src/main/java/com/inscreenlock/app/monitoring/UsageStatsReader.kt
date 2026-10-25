@@ -80,6 +80,29 @@ class UsageStatsReader(private val context: Context) {
         }.getOrNull()
     }
 
+    fun recentForegroundPackage(nowMs: Long = System.currentTimeMillis()): String? {
+        if (!hasUsageAccess()) return null
+        val manager = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
+            ?: return null
+        return runCatching {
+            val usageEvents = manager.queryEvents(nowMs - FOREGROUND_LOOKBACK_MS, nowMs) ?: return null
+            var foregroundPackage: String? = null
+            val event = UsageEvents.Event()
+            while (usageEvents.hasNextEvent()) {
+                usageEvents.getNextEvent(event)
+                val signal = signalFor(event) ?: continue
+                when (signal.kind) {
+                    UsageSignal.Kind.APP_FOREGROUND -> foregroundPackage = signal.packageName
+                    UsageSignal.Kind.APP_BACKGROUND -> {
+                        if (foregroundPackage == signal.packageName) foregroundPackage = null
+                    }
+                    else -> Unit
+                }
+            }
+            foregroundPackage
+        }.getOrNull()
+    }
+
     private fun excludedPackages(): Set<String> = buildSet {
         add(context.packageName)
         add(SYSTEM_UI_PACKAGE)
@@ -152,5 +175,6 @@ class UsageStatsReader(private val context: Context) {
     private companion object {
         const val SYSTEM_UI_PACKAGE = "com.android.systemui"
         const val ICON_SIZE_PX = 96
+        const val FOREGROUND_LOOKBACK_MS = 24 * 60 * 60 * 1000L
     }
 }
