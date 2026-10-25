@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
@@ -44,6 +45,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.foundation.Image
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.Role
@@ -54,6 +57,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.size
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
@@ -64,7 +68,10 @@ import com.inscreenlock.app.domain.BudgetEvaluator
 import com.inscreenlock.app.domain.BudgetLevel
 import com.inscreenlock.app.domain.ReactionMode
 import com.inscreenlock.app.domain.UsageTotals
+import com.inscreenlock.app.domain.formatUsageDuration
+import com.inscreenlock.app.domain.rankUsageByPackage
 import com.inscreenlock.app.monitoring.AccessibilityMonitorService
+import com.inscreenlock.app.monitoring.AppUsageEntry
 import com.inscreenlock.app.monitoring.UsageStatsReader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -92,6 +99,7 @@ fun InScreenLockApp(
     val usageReader = remember { UsageStatsReader(context.applicationContext) }
     val scope = rememberCoroutineScope()
     var usageTotals by remember { mutableStateOf<UsageTotals?>(null) }
+    var appUsage by remember { mutableStateOf<List<AppUsageEntry>?>(null) }
     var usageAvailable by remember { mutableStateOf(false) }
     var accessibilityEnabled by remember { mutableStateOf(false) }
     var deviceSecure by remember { mutableStateOf(false) }
@@ -106,7 +114,7 @@ fun InScreenLockApp(
         authenticationLauncher.launch(UnlockActivity.intent(context, confirmOnly = true, hasPin = settings.hasPin))
     }
 
-    LaunchedEffect(lifecycleOwner, usageReader) {
+    LaunchedEffect(lifecycleOwner, usageReader, showSettings) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (isActive) {
                 val permissionState = withContext(Dispatchers.IO) {
@@ -115,7 +123,11 @@ fun InScreenLockApp(
                 usageAvailable = permissionState.first
                 accessibilityEnabled = permissionState.second
                 deviceSecure = (context.getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager).isDeviceSecure
-                usageTotals = withContext(Dispatchers.IO) { usageReader.todayTotals() }
+                if (!showSettings) {
+                    val snapshot = withContext(Dispatchers.IO) { usageReader.todaySnapshot() }
+                    usageTotals = snapshot?.totals
+                    appUsage = snapshot?.apps
+                }
                 delay(REFRESH_INTERVAL_MS)
             }
         }
@@ -169,6 +181,7 @@ fun InScreenLockApp(
                     DashboardScreen(
                         settings = settings,
                         totals = usageTotals,
+                        appUsage = if (usageAvailable) appUsage else null,
                         budgetLevel = budget.level,
                         usageAvailable = usageAvailable,
                         accessibilityEnabled = accessibilityEnabled,
@@ -217,6 +230,13 @@ private fun ConsentScreen(onContinue: () -> Unit) {
         )
         Spacer(Modifier.height(12.dp))
         Text(
+            "Com Acesso de uso, o InScreenLock lê o tempo em primeiro plano de todos os apps de hoje " +
+                "somente para mostrar este painel neste aparelho. Nada sai do aparelho nem é salvo.",
+            color = Muted,
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
             "Não lemos nem armazenamos mensagens, legendas ou imagens.",
             color = MainText,
             style = MaterialTheme.typography.bodyLarge,
@@ -244,6 +264,7 @@ private fun ConsentScreen(onContinue: () -> Unit) {
 private fun DashboardScreen(
     settings: UserSettings,
     totals: UsageTotals?,
+    appUsage: List<AppUsageEntry>?,
     budgetLevel: BudgetLevel,
     usageAvailable: Boolean,
     accessibilityEnabled: Boolean,
@@ -314,6 +335,8 @@ private fun DashboardScreen(
         AppBreakdownCard("Instagram", totals?.instagramMs)
         Spacer(Modifier.height(10.dp))
         AppBreakdownCard("TikTok", totals?.tiktokMs)
+        Spacer(Modifier.height(14.dp))
+        AppUsageCard(appUsage)
         Spacer(Modifier.height(16.dp))
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.fillMaxWidth().padding(16.dp)) {
@@ -356,6 +379,68 @@ private fun DashboardScreen(
             Text("Configurações e privacidade")
         }
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+internal fun AppUsageCard(apps: List<AppUsageEntry>?) {
+    var expanded by remember { mutableStateOf(false) }
+    val sortedApps = remember(apps) {
+        apps?.let { entries ->
+            val ranked = rankUsageByPackage(
+                entries.associate { it.packageName to it.durationMs },
+                limit = entries.size,
+            )
+            val entriesByPackage = entries.associateBy { it.packageName }
+            ranked.mapNotNull { (packageName) -> entriesByPackage[packageName] }
+        }
+    }
+    Card(modifier = Modifier.fillMaxWidth().testTag("app-usage-card")) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Text("Uso de hoje por app", color = MainText, style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(6.dp))
+            when {
+                apps == null -> Text("Indisponível", color = Muted, style = MaterialTheme.typography.bodyMedium)
+                sortedApps.isNullOrEmpty() -> Text("Nenhum uso registrado hoje", color = Muted)
+                else -> {
+                    val visibleApps = if (expanded) sortedApps else sortedApps.take(APP_USAGE_PREVIEW_COUNT)
+                    visibleApps.forEach { entry -> AppUsageRow(entry) }
+                    if (sortedApps.size > APP_USAGE_PREVIEW_COUNT) {
+                        androidx.compose.material3.TextButton(
+                            onClick = { expanded = !expanded },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("app-usage-toggle"),
+                        ) {
+                            Text(if (expanded) "Mostrar menos" else "Ver todos")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppUsageRow(entry: AppUsageEntry) {
+    Row(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics(mergeDescendants = true) {
+            contentDescription = "${entry.label}, ${formatUsageDuration(entry.durationMs)}"
+        }.testTag("app-usage-${entry.packageName}"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (entry.icon != null) {
+            Image(
+                bitmap = entry.icon.asImageBitmap(),
+                contentDescription = null,
+                modifier = Modifier.size(40.dp),
+            )
+        } else {
+            Surface(modifier = Modifier.size(40.dp), color = SurfaceColor, shape = MaterialTheme.shapes.small) {
+                Text("•", color = Mint, style = MaterialTheme.typography.titleLarge)
+            }
+        }
+        Text(entry.label, color = MainText, modifier = Modifier.weight(1f), maxLines = 2, style = MaterialTheme.typography.bodyMedium)
+        Text(formatUsageDuration(entry.durationMs), color = Muted, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -520,7 +605,9 @@ internal fun SettingsScreen(
                 Text("Privacidade", color = MainText, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Sem conta, rede ou anúncios. O serviço recebe notificações de mudança de janela de qualquer app " +
+                    "Com Acesso de uso, o InScreenLock lê o tempo em primeiro plano de todos os apps de hoje " +
+                        "somente para mostrar o painel neste aparelho; nada sai do aparelho nem é salvo. " +
+                        "Sem conta, rede ou anúncios. O serviço recebe notificações de mudança de janela de qualquer app " +
                         "e lê apenas o nome do pacote para reconhecer entradas e saídas do Instagram/TikTok; " +
                         "descarta os demais e não guarda esses dados. Guardamos preferências e o maior limite já " +
                         "avisado no dia; o tempo vem do histórico de uso do Android. O bloqueio cobre a janela inteira " +
@@ -608,12 +695,13 @@ private fun openAccessibilitySettings(context: Context) {
     context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }
 
+private const val REFRESH_INTERVAL_MS = 10_000L
+private const val MINUTE_MS = 60_000L
+private const val APP_USAGE_PREVIEW_COUNT = 10
+
 private fun formatDuration(milliseconds: Long): String {
-    val totalMinutes = milliseconds.coerceAtLeast(0) / MINUTE_MS
+    val totalMinutes = milliseconds.coerceAtLeast(0L) / MINUTE_MS
     val hours = totalMinutes / 60
     val minutes = totalMinutes % 60
     return if (hours > 0) "${hours}h ${minutes}min" else "${minutes}min"
 }
-
-private const val REFRESH_INTERVAL_MS = 10_000L
-private const val MINUTE_MS = 60_000L
