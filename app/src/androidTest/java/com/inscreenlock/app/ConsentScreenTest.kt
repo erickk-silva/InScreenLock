@@ -8,12 +8,14 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import org.junit.rules.RuleChain
 import org.junit.Rule
 import org.junit.Test
 
 class ConsentScreenTest {
-    @get:Rule
-    val composeRule = createAndroidComposeRule<MainActivity>()
+    private val activityRule = createAndroidComposeRule<MainActivity>()
+    @get:Rule val rules = RuleChain.outerRule(ClearSettingsRule()).around(activityRule)
+    private val composeRule get() = activityRule
 
     @Test
     fun firstLaunchDisclosesMeasurementAndRequiresAffirmativeConsent() {

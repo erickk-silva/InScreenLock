@@ -231,7 +231,7 @@ class DailyTimeCalculatorScenariosTest {
     fun unavailableUsageDoesNotBecomeZeroOrAllowPause() {
         val budget = BudgetEvaluator.evaluate(0, 60, dataAvailable = false)
         assertEquals(BudgetLevel.UNAVAILABLE, budget.level)
-        assertEquals(false, budget.pauseAllowed)
+        assertEquals(false, budget.lockEligible)
     }
 
     @Test
@@ -239,7 +239,7 @@ class DailyTimeCalculatorScenariosTest {
         assertFalse(MonitoringGate.canInspectEvents(consent = true, enabled = true, usageAccess = false))
         val budget = BudgetEvaluator.evaluate(0, 60, dataAvailable = false)
         assertEquals(BudgetLevel.UNAVAILABLE, budget.level)
-        assertFalse(budget.pauseAllowed)
+        assertFalse(budget.lockEligible)
     }
 
     @Test

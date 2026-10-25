@@ -9,12 +9,14 @@ Aplicativo Android offline para acompanhar o tempo total com Instagram e TikTok 
 - O serviço recebe notificações de mudança de janela de qualquer aplicativo apenas para identificar quando Instagram ou TikTok entram ou saem do primeiro plano. Lê somente o nome do pacote, descarta os demais e não guarda nomes de pacote nem notificações. Não acessa a árvore visual.
 - A duração diária é recalculada a partir de `UsageStatsManager` e dos limites do dia local. Preferências e o estado numérico do aviso diário ficam no DataStore. Nenhum texto, imagem, mensagem, legenda, perfil ou histórico de eventos dos aplicativos é guardado.
 - O manifesto não declara Internet, leitura de notificações, janela de alerta do sistema, serviço em primeiro plano ou consulta de todos os pacotes.
-- A pausa voluntária cobre toda a janela do Instagram ou TikTok, inclusive telas internas como login, e oferece ações para abrir Início e Configurações do InScreenLock. Home, Voltar e notificações do sistema ainda não foram validados em aparelho físico.
+- O bloqueio voluntário cobre toda a janela do Instagram ou TikTok, inclusive telas internas como login, e oferece “Ir para o início” e “Desbloquear”. A liberação dura até 15 minutos. O Android continua permitindo desativar Acessibilidade, forçar parada ou desinstalar; desativar Acessibilidade nas configurações encerra o bloqueio, intencionalmente, conforme a política do Android.
+- O bloqueio exige uma credencial segura de tela do dispositivo ou PIN do InScreenLock. Sem credencial, a tela informa que o bloqueio está indisponível e mostra somente o aviso. O PIN local tem 4–8 dígitos e é guardado apenas como derivação com salt; ajustes que reduzem a proteção pedem autenticação.
+- Desinstalar remove os dados locais do InScreenLock: preferências, PIN, avisos e liberação. Backup e transferência de dispositivo estão desativados. O histórico de Acesso de uso do Android pertence ao sistema e o InScreenLock nunca o copia.
 - Este APK privado não foi submetido à revisão de acessibilidade da Google Play; uma distribuição pela loja exigirá declaração e revisão próprias.
 
 ## Escopo do MVP
 
-O modo disponível mede tempo total de primeiro plano com a tela ativa e desbloqueada; a meta padrão é 30 minutos por dia. A reação padrão é um aviso discreto; a pausa em tela cheia pode ser escolhida nas configurações.
+O modo disponível mede tempo total de primeiro plano com a tela ativa e desbloqueada; a meta padrão é 30 minutos por dia. A reação padrão é bloqueio com credencial; “Aviso discreto” também pode ser escolhido nas configurações. O desbloqueio libera o uso por até 15 minutos e exige nova autenticação para ajustes que reduzam a proteção.
 
 A estimativa de transições para vídeos curtos permanece desativada. Ela só poderá ser habilitada depois de validação física independente no Instagram e no TikTok. Um emulador não comprova essa detecção.
 

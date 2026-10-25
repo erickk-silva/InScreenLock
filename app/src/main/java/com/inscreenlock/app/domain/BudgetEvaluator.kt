@@ -13,7 +13,7 @@ data class BudgetState(
     val remainingMs: Long?,
     val level: BudgetLevel,
     val progress: Float,
-    val pauseAllowed: Boolean,
+    val lockEligible: Boolean,
 )
 
 object BudgetEvaluator {
@@ -25,7 +25,7 @@ object BudgetEvaluator {
                 remainingMs = null,
                 level = BudgetLevel.UNAVAILABLE,
                 progress = 0f,
-                pauseAllowed = false,
+                lockEligible = false,
             )
         }
 
@@ -40,7 +40,7 @@ object BudgetEvaluator {
             remainingMs = limitMs - usedMs,
             level = level,
             progress = (usedMs.toDouble() / limitMs).coerceAtMost(1.0).toFloat(),
-            pauseAllowed = level == BudgetLevel.EXCEEDED,
+            lockEligible = level == BudgetLevel.EXCEEDED,
         )
     }
 

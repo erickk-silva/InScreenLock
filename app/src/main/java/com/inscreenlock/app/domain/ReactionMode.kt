@@ -2,5 +2,13 @@ package com.inscreenlock.app.domain
 
 enum class ReactionMode {
     WARNING,
-    PAUSE,
+    LOCK;
+
+    companion object {
+        fun fromStoredValue(value: String?): ReactionMode = when (value) {
+            "WARNING" -> WARNING
+            null, "PAUSE", "LOCK" -> LOCK
+            else -> LOCK
+        }
+    }
 }

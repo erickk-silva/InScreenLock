@@ -22,6 +22,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".UnlockActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity="com.inscreenlock.app.unlock"
+            android:theme="@style/Theme.InScreenLock" />
         <service
             android:name=".monitoring.AccessibilityMonitorService"
             android:exported="true"

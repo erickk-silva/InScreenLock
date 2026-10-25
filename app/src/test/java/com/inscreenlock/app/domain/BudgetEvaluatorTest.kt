@@ -21,7 +21,7 @@ class BudgetEvaluatorTest {
     fun unavailableDataNeverBecomesZeroUsageOrAnExceededPause() {
         val state = BudgetEvaluator.evaluate(0, 100, false)
         assertEquals(BudgetLevel.UNAVAILABLE, state.level)
-        assertFalse(state.pauseAllowed)
+        assertFalse(state.lockEligible)
     }
 
     @Test

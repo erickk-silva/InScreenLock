@@ -19,7 +19,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
-import com.inscreenlock.app.MainActivity
+import com.inscreenlock.app.UnlockActivity
 import com.inscreenlock.app.R
 import com.inscreenlock.app.data.SettingsRepository
 import com.inscreenlock.app.data.UserSettings
@@ -28,6 +28,7 @@ import com.inscreenlock.app.domain.BudgetLevel
 import com.inscreenlock.app.domain.DailyTimeCalculator
 import com.inscreenlock.app.domain.MonitoringGate
 import com.inscreenlock.app.domain.ReactionMode
+import com.inscreenlock.app.domain.LockPolicy
 import com.inscreenlock.app.monitoring.UsageStatsReader
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -48,12 +49,13 @@ class AccessibilityMonitorService : AccessibilityService() {
     private var currentSettings = UserSettings()
     private var currentTargetPackage: String? = null
     private var overlay: View? = null
-    private var overlayIsPause = false
+    private var overlayIsLock = false
     private var refreshJob: kotlinx.coroutines.Job? = null
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == Intent.ACTION_SCREEN_OFF) {
+                refreshJob?.cancel()
                 removeOverlay()
             }
         }
@@ -75,14 +77,9 @@ class AccessibilityMonitorService : AccessibilityService() {
                 currentSettings = settings
                 if (!settings.accessibilityDisclosureAccepted || !settings.monitoringEnabled) {
                     currentTargetPackage = null
+                    refreshJob?.cancel()
                     removeOverlay()
                 }
-            }
-        }
-        serviceScope.launch {
-            while (isActive) {
-                if (currentTargetPackage != null) refreshOverlay()
-                delay(REFRESH_INTERVAL_MS)
             }
         }
     }
@@ -99,23 +96,40 @@ class AccessibilityMonitorService : AccessibilityService() {
             return
         }
         val packageName = event?.packageName?.toString()
-        currentTargetPackage = packageName?.takeIf(::isSupportedPackage)
+        val targetPackage = packageName?.takeIf(::isSupportedPackage)
+        if (targetPackage == currentTargetPackage) {
+            if (targetPackage != null && refreshJob?.isActive != true) startRefreshLoop()
+            return
+        }
+        currentTargetPackage = targetPackage
         if (currentTargetPackage == null) {
+            refreshJob?.cancel()
             removeOverlay()
         } else {
-            refreshJob?.cancel()
-            refreshJob = serviceScope.launch { refreshOverlay() }
+            startRefreshLoop()
+        }
+    }
+
+    private fun startRefreshLoop() {
+        refreshJob?.cancel()
+        refreshJob = serviceScope.launch {
+            while (isActive && currentTargetPackage != null) {
+                refreshOverlay()
+                delay(REFRESH_INTERVAL_MS)
+            }
         }
     }
 
     override fun onInterrupt() {
         currentTargetPackage = null
+        refreshJob?.cancel()
         removeOverlay()
     }
 
     override fun onDestroy() {
         runCatching { unregisterReceiver(screenReceiver) }
         currentTargetPackage = null
+        refreshJob?.cancel()
         removeOverlay()
         serviceScope.cancel()
         super.onDestroy()
@@ -143,6 +157,7 @@ class AccessibilityMonitorService : AccessibilityService() {
 
         val totals = withContext(Dispatchers.IO) { usageStatsReader.todayTotals() }
         if (currentTargetPackage != targetPackage) return
+        settingsRepository.clearExpiredUnlock(System.currentTimeMillis(), LocalDate.now())
         if (totals == null) {
             showBadge("Contagem indisponível")
             return
@@ -158,17 +173,31 @@ class AccessibilityMonitorService : AccessibilityService() {
             if (warningClaimed) Toast.makeText(this, R.string.threshold_warning, Toast.LENGTH_LONG).show()
         }
 
-        if (budget.pauseAllowed && settings.reactionMode == ReactionMode.PAUSE) {
-            showPause(totals.instagramMs, totals.tiktokMs, settings.dailyLimitMinutes)
+        val credentialAvailable = keyguardManager.isDeviceSecure || settings.hasPin
+        val shouldLock = LockPolicy.shouldBlock(
+            mode = settings.reactionMode,
+            dataAvailable = true,
+            credentialAvailable = credentialAvailable,
+            monitoringEnabled = settings.monitoringEnabled,
+            usedMs = totals.totalMs,
+            limitMs = limitMs,
+            unlockedUntilMs = settings.unlockedUntilMs,
+            nowMs = System.currentTimeMillis(),
+            unlockedDay = settings.unlockedDay,
+            currentDay = LocalDate.now().toString(),
+        )
+        if (shouldLock) {
+            showLock(totals.totalMs, settings.dailyLimitMinutes, settings.hasPin)
         } else {
             val timeLabel = "${formatMinutes(totals.totalMs)} / ${settings.dailyLimitMinutes} min"
-            showBadge(if (budget.level == BudgetLevel.EXCEEDED) "Limite · $timeLabel" else timeLabel)
+            val lockUnavailable = settings.reactionMode == ReactionMode.LOCK && !credentialAvailable && budget.level == BudgetLevel.EXCEEDED
+            showBadge(if (lockUnavailable) "Bloqueio indisponível · Aviso" else if (budget.level == BudgetLevel.EXCEEDED) "Limite · $timeLabel" else timeLabel)
         }
     }
 
     private fun showBadge(text: String) {
         val existing = overlay
-        if (existing is TextView && !overlayIsPause) {
+        if (existing is TextView && !overlayIsLock) {
             existing.text = text
             return
         }
@@ -184,11 +213,11 @@ class AccessibilityMonitorService : AccessibilityService() {
         addOverlay(badge, pause = false)
     }
 
-    private fun showPause(instagramMs: Long, tiktokMs: Long, limitMinutes: Int) {
+    private fun showLock(totalMs: Long, limitMinutes: Int, hasPin: Boolean) {
         val existing = overlay
-        if (existing is LinearLayout && overlayIsPause) {
+        if (existing is LinearLayout && overlayIsLock) {
             existing.findViewWithTag<TextView>(PAUSE_SUMMARY_TAG).text =
-                getString(R.string.pause_summary, formatMinutes(instagramMs + tiktokMs), limitMinutes)
+                getString(R.string.lock_summary, formatMinutes(totalMs), limitMinutes)
             return
         }
         removeOverlay()
@@ -200,7 +229,7 @@ class AccessibilityMonitorService : AccessibilityService() {
             setBackgroundColor(Color.rgb(16, 19, 25))
         }
         panel.addView(TextView(this).apply {
-            text = getString(R.string.pause_title)
+            text = getString(R.string.lock_title)
             textSize = 26f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Color.rgb(242, 245, 247))
@@ -208,21 +237,17 @@ class AccessibilityMonitorService : AccessibilityService() {
         }, matchWidthWrapHeight())
         panel.addView(TextView(this).apply {
             tag = PAUSE_SUMMARY_TAG
-            text = getString(R.string.pause_summary, formatMinutes(instagramMs + tiktokMs), limitMinutes)
+            text = getString(R.string.lock_summary, formatMinutes(totalMs), limitMinutes)
             textSize = 16f
             setTextColor(Color.rgb(165, 175, 188))
             gravity = Gravity.CENTER
             setPadding(0, dp(16), 0, dp(24))
         }, matchWidthWrapHeight())
-        panel.addView(pauseButton(getString(R.string.pause_home)) {
-            startActivity(
-                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
+        panel.addView(pauseButton(getString(R.string.lock_home)) {
+            performGlobalAction(GLOBAL_ACTION_HOME)
         }, matchWidthWrapHeight())
-        panel.addView(pauseButton(getString(R.string.pause_settings)) {
-            startActivity(Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_OPEN_SETTINGS, true)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP))
+        panel.addView(pauseButton(getString(R.string.lock_unlock)) {
+            startActivity(UnlockActivity.intent(this, confirmOnly = false, hasPin = hasPin).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }, matchWidthWrapHeight())
         addOverlay(panel, pause = true)
     }
@@ -252,14 +277,14 @@ class AccessibilityMonitorService : AccessibilityService() {
         runCatching { windowManager.addView(view, params) }
             .onSuccess {
                 overlay = view
-                overlayIsPause = pause
+                overlayIsLock = pause
             }
     }
 
     private fun removeOverlay() {
         overlay?.let { view -> runCatching { windowManager.removeView(view) } }
         overlay = null
-        overlayIsPause = false
+        overlayIsLock = false
     }
 
     private fun roundedBackground(color: Int) = GradientDrawable().apply {

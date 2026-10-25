@@ -3,6 +3,8 @@ package com.inscreenlock.app.ui
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -54,7 +57,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
-import com.inscreenlock.app.MainActivity
+import com.inscreenlock.app.UnlockActivity
 import com.inscreenlock.app.data.SettingsRepository
 import com.inscreenlock.app.data.UserSettings
 import com.inscreenlock.app.domain.BudgetEvaluator
@@ -91,7 +94,17 @@ fun InScreenLockApp(
     var usageTotals by remember { mutableStateOf<UsageTotals?>(null) }
     var usageAvailable by remember { mutableStateOf(false) }
     var accessibilityEnabled by remember { mutableStateOf(false) }
+    var deviceSecure by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(openSettingsInitially) }
+    var pendingProtectedChange by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val authenticationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) pendingProtectedChange?.invoke()
+        pendingProtectedChange = null
+    }
+    val authenticate: (() -> Unit) -> Unit = { action ->
+        pendingProtectedChange = action
+        authenticationLauncher.launch(UnlockActivity.intent(context, confirmOnly = true, hasPin = settings.hasPin))
+    }
 
     LaunchedEffect(lifecycleOwner, usageReader) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -101,6 +114,7 @@ fun InScreenLockApp(
                 }
                 usageAvailable = permissionState.first
                 accessibilityEnabled = permissionState.second
+                deviceSecure = (context.getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager).isDeviceSecure
                 usageTotals = withContext(Dispatchers.IO) { usageReader.todayTotals() }
                 delay(REFRESH_INTERVAL_MS)
             }
@@ -125,6 +139,7 @@ fun InScreenLockApp(
                     settings = settings,
                     usageAvailable = usageAvailable,
                     accessibilityEnabled = accessibilityEnabled,
+                    deviceSecure = deviceSecure,
                     onBack = { showSettings = false },
                     onOpenUsageSettings = { openUsageSettings(context) },
                     onOpenAccessibilitySettings = { openAccessibilitySettings(context) },
@@ -139,6 +154,11 @@ fun InScreenLockApp(
                         scope.launch { settingsRepository.updateBudget(minutes, reaction) }
                     },
                     onClearLocalData = { scope.launch { settingsRepository.clearLocalSettings() } },
+                    onSetPin = { pin ->
+                        scope.launch { settingsRepository.setPin(pin) }
+                    },
+                    onRemovePin = { secure -> scope.launch { settingsRepository.removePin(secure) } },
+                    onAuthenticate = authenticate,
                 )
                 else -> {
                     val budget = BudgetEvaluator.evaluate(
@@ -152,12 +172,13 @@ fun InScreenLockApp(
                         budgetLevel = budget.level,
                         usageAvailable = usageAvailable,
                         accessibilityEnabled = accessibilityEnabled,
+                        deviceSecure = deviceSecure,
                         onOpenSettings = { showSettings = true },
                         onMonitoringChanged = { enabled ->
                             if (enabled && usageAvailable && accessibilityEnabled) {
                                 scope.launch { settingsRepository.setMonitoringEnabled(true) }
                             } else if (!enabled) {
-                                scope.launch { settingsRepository.setMonitoringEnabled(false) }
+                                authenticate { scope.launch { settingsRepository.setMonitoringEnabled(false) } }
                             }
                         },
                     )
@@ -188,9 +209,9 @@ private fun ConsentScreen(onContinue: () -> Unit) {
         Text(
             "O serviço recebe notificações de mudança de janela de qualquer app e lê somente o nome do pacote " +
                 "para identificar quando Instagram ou TikTok entram ou saem do primeiro plano. Os demais pacotes " +
-                "são descartados, e nada disso é guardado. A pausa cobre toda a janela do app, inclusive telas " +
-                "internas como login, e oferece Início e Configurações. Home, Voltar e notificações do sistema " +
-                "ainda não foram validados em aparelho físico.",
+                "são descartados, e nada disso é guardado. No limite, o bloqueio cobre toda a janela do app, " +
+                "inclusive login, e oferece Início e desbloqueio. Desativar Acessibilidade nas configurações do " +
+                "Android encerra o bloqueio; isso é intencional pela política do Android.",
             color = Muted,
             style = MaterialTheme.typography.bodyLarge,
         )
@@ -226,10 +247,13 @@ private fun DashboardScreen(
     budgetLevel: BudgetLevel,
     usageAvailable: Boolean,
     accessibilityEnabled: Boolean,
+    deviceSecure: Boolean,
     onOpenSettings: () -> Unit,
     onMonitoringChanged: (Boolean) -> Unit,
 ) {
-    val protectionReady = usageAvailable && accessibilityEnabled && settings.monitoringEnabled
+    val credentialAvailable = deviceSecure || settings.hasPin
+    val protectionReady = usageAvailable && accessibilityEnabled && settings.monitoringEnabled &&
+        (settings.reactionMode == ReactionMode.WARNING || credentialAvailable)
     val progressColor = when (budgetLevel) {
         BudgetLevel.ATTENTION -> Attention
         BudgetLevel.EXCEEDED -> Exceeded
@@ -296,6 +320,7 @@ private fun DashboardScreen(
                 Text(
                     when {
                         protectionReady -> "Monitoramento ativo"
+                        settings.reactionMode == ReactionMode.LOCK && !credentialAvailable -> "Bloqueio indisponível: defina um PIN"
                         !usageAvailable -> "Acesso de uso necessário"
                         !accessibilityEnabled -> "Contador sobre os apps indisponível"
                         else -> "Monitoramento desativado"
@@ -319,7 +344,7 @@ private fun DashboardScreen(
                 ) {
                     Text("Monitorar apps", color = MainText)
                     Switch(
-                        checked = protectionReady,
+                        checked = settings.monitoringEnabled && usageAvailable && accessibilityEnabled,
                         onCheckedChange = onMonitoringChanged,
                         enabled = usageAvailable && accessibilityEnabled,
                     )
@@ -349,20 +374,27 @@ private fun AppBreakdownCard(name: String, usedMs: Long?) {
 }
 
 @Composable
-private fun SettingsScreen(
+internal fun SettingsScreen(
     settings: UserSettings,
     usageAvailable: Boolean,
     accessibilityEnabled: Boolean,
+    deviceSecure: Boolean,
     onBack: () -> Unit,
     onOpenUsageSettings: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
     onMonitoringChanged: (Boolean) -> Unit,
     onSaveBudget: (Int, ReactionMode) -> Unit,
     onClearLocalData: () -> Unit,
+    onSetPin: (String) -> Unit,
+    onRemovePin: (Boolean) -> Unit,
+    onAuthenticate: (() -> Unit) -> Unit,
 ) {
     var limitText by remember(settings.dailyLimitMinutes) { mutableStateOf(settings.dailyLimitMinutes.toString()) }
     var reaction by remember(settings.reactionMode) { mutableStateOf(settings.reactionMode) }
     var showClearConfirmation by remember { mutableStateOf(false) }
+    var pinFirst by remember { mutableStateOf("") }
+    var pinSecond by remember { mutableStateOf("") }
+    var pinError by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
@@ -401,25 +433,85 @@ private fun SettingsScreen(
                     label = { Text("Minutos (mínimo 1)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("daily-limit"),
                 )
                 Text("Conta o tempo total com Instagram e TikTok abertos e a tela ativa.", color = Muted)
                 Spacer(Modifier.height(8.dp))
                 Text("Ao atingir o limite", color = MainText)
                 ReactionMode.entries.forEach { option ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected = reaction == option, onClick = { reaction = option })
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().selectable(
+                            selected = reaction == option,
+                            role = Role.RadioButton,
+                            onClick = { reaction = option },
+                        ).testTag("reaction-${option.name}"),
+                    ) {
+                        RadioButton(selected = reaction == option, onClick = null)
                         Text(
-                            if (option == ReactionMode.WARNING) "Aviso discreto" else "Pausa reversível",
+                            if (option == ReactionMode.WARNING) "Aviso discreto" else "Bloqueio com senha",
                             color = MainText,
                         )
                     }
                 }
                 Button(
-                    onClick = { limitText.toIntOrNull()?.takeIf { it > 0 }?.let { onSaveBudget(it, reaction) } },
+                    onClick = {
+                        limitText.toIntOrNull()?.takeIf { it > 0 }?.let { minutes ->
+                            val save = { onSaveBudget(minutes, reaction) }
+                            if (minutes > settings.dailyLimitMinutes ||
+                                settings.reactionMode == ReactionMode.LOCK && reaction == ReactionMode.WARNING
+                            ) onAuthenticate(save) else save()
+                        }
+                    },
                     enabled = limitText.toIntOrNull()?.let { it > 0 } == true,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("save-budget"),
                 ) { Text("Salvar limite") }
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                Text("Credencial de desbloqueio", color = MainText, fontWeight = FontWeight.Medium)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    if (settings.hasPin) "PIN do InScreenLock definido" else if (deviceSecure) "Usando o bloqueio de tela seguro do dispositivo." else "Bloqueio indisponível: defina um PIN para ativá-lo. Até lá, aparece apenas um aviso.",
+                    color = Muted,
+                )
+                OutlinedTextField(
+                    value = pinFirst,
+                    onValueChange = { if (it.length <= 8 && it.all { char -> char in '0'..'9' }) pinFirst = it },
+                    label = { Text(if (settings.hasPin) "Novo PIN (4–8 dígitos)" else "Definir PIN (4–8 dígitos)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("pin-first"),
+                )
+                OutlinedTextField(
+                    value = pinSecond,
+                    onValueChange = { if (it.length <= 8 && it.all { char -> char in '0'..'9' }) pinSecond = it },
+                    label = { Text("Digite o PIN novamente") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("pin-second"),
+                )
+                Button(
+                    onClick = {
+                        when {
+                            pinFirst.length !in 4..8 -> pinError = "Use de 4 a 8 dígitos."
+                            pinFirst != pinSecond -> pinError = "Os PINs não coincidem."
+                    else -> {
+                            val pinToSave = pinFirst
+                            val save = { onSetPin(pinToSave) }
+                            if (settings.hasPin) onAuthenticate(save) else save()
+                            pinFirst = ""; pinSecond = ""; pinError = ""
+                        }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().testTag("pin-save"),
+                ) { Text(if (settings.hasPin) "Alterar PIN" else "Definir PIN") }
+                if (settings.hasPin) {
+                    OutlinedButton(onClick = { onAuthenticate { onRemovePin(deviceSecure) } }, modifier = Modifier.fillMaxWidth().testTag("pin-remove")) { Text("Remover PIN") }
+                }
+                if (pinError.isNotEmpty()) Text(pinError, color = Exceeded, modifier = Modifier.testTag("pin-error"))
             }
         }
         Spacer(Modifier.height(14.dp))
@@ -431,9 +523,11 @@ private fun SettingsScreen(
                     "Sem conta, rede ou anúncios. O serviço recebe notificações de mudança de janela de qualquer app " +
                         "e lê apenas o nome do pacote para reconhecer entradas e saídas do Instagram/TikTok; " +
                         "descarta os demais e não guarda esses dados. Guardamos preferências e o maior limite já " +
-                        "avisado no dia; o tempo vem do histórico de uso do Android. A pausa cobre a janela inteira " +
-                        "do app, inclusive login, e oferece Início e Configurações. Home, Voltar e notificações do " +
-                        "sistema não foram validados em aparelho físico. Este APK privado ainda não passou por " +
+                        "avisado no dia; o tempo vem do histórico de uso do Android. O bloqueio cobre a janela inteira " +
+                        "do app, inclusive login, e oferece Início e desbloqueio por credencial. Desativar " +
+                        "Acessibilidade nas configurações do Android encerra o bloqueio; isso é intencional pela " +
+                        "política do Android. Desinstalar apaga os dados do InScreenLock. O histórico de Acesso de " +
+                        "uso é do Android e nunca é copiado pelo app. Este APK privado ainda não passou por " +
                         "revisão de acessibilidade da Google Play.",
                     color = Muted,
                 )
@@ -444,7 +538,7 @@ private fun SettingsScreen(
             }
         }
         Spacer(Modifier.height(14.dp))
-        OutlinedButton(onClick = { onMonitoringChanged(false) }, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = { onAuthenticate { onMonitoringChanged(false) } }, modifier = Modifier.fillMaxWidth().testTag("disable-monitoring")) {
             Text("Desativar monitoramento")
         }
         OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Voltar") }
@@ -457,7 +551,7 @@ private fun SettingsScreen(
             title = { Text("Apagar preferências?") },
             text = { Text("O consentimento e as configurações locais serão removidos.") },
             confirmButton = {
-                Button(onClick = { showClearConfirmation = false; onClearLocalData() }) { Text("Apagar") }
+                Button(onClick = { showClearConfirmation = false; onAuthenticate(onClearLocalData) }) { Text("Apagar") }
             },
             dismissButton = {
                 OutlinedButton(onClick = { showClearConfirmation = false }) { Text("Cancelar") }

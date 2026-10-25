@@ -18,7 +18,7 @@ class SettingsRepositoryWarningTest {
         val day = LocalDate.of(2026, 10, 25)
 
         assertEquals(true, repository.claimThresholdWarning(day, 30))
-        repository.updateBudget(30, ReactionMode.PAUSE)
+        repository.updateBudget(30, ReactionMode.LOCK)
         assertEquals(false, repository.claimThresholdWarning(day, 30))
         assertEquals(false, repository.claimThresholdWarning(day, 20))
         assertEquals(true, repository.claimThresholdWarning(day, 45))
