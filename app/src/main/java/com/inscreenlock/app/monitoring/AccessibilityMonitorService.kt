@@ -36,6 +36,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -79,12 +80,35 @@ class AccessibilityMonitorService : AccessibilityService() {
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
         serviceScope.launch {
+            var initialSettingsHandled = false
             settingsRepository.settings.collect { settings ->
                 currentSettings = settings
                 if (!settings.accessibilityDisclosureAccepted || !settings.monitoringEnabled) {
                     sessionController?.reset()
                     refreshJob?.cancel()
                     removeOverlay()
+                }
+                if (!initialSettingsHandled) {
+                    initialSettingsHandled = true
+                    val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+                    val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+                    val monitoringAllowed = MonitoringGate.canInspectEvents(
+                        consent = settings.accessibilityDisclosureAccepted,
+                        enabled = settings.monitoringEnabled,
+                        usageAccess = usageStatsReader.hasUsageAccess(),
+                    )
+                    val canQueryForeground = monitoringAllowed && powerManager.isInteractive &&
+                        !keyguardManager.isKeyguardLocked && sessionController?.targetPackage == null
+                    val observedForeground = if (canQueryForeground) {
+                        withContext(Dispatchers.IO) { usageStatsReader.foregroundPackageForReconnection() }
+                    } else null
+                    val resumed = sessionController?.resumeFromReconnection(
+                        observedForegroundPackage = observedForeground,
+                        monitoringAllowed = monitoringAllowed,
+                        screenInteractive = powerManager.isInteractive,
+                        keyguardVisible = keyguardManager.isKeyguardLocked,
+                    ) == true
+                    if (resumed) startRefreshLoop()
                 }
             }
         }
@@ -203,39 +227,50 @@ class AccessibilityMonitorService : AccessibilityService() {
             showBadge("Contagem indisponível")
             return
         }
+        val lockSettings = settingsRepository.settings.first()
+        currentSettings = lockSettings
+        if (currentTargetPackage != targetPackage || !MonitoringGate.canInspectEvents(
+                consent = lockSettings.accessibilityDisclosureAccepted,
+                enabled = lockSettings.monitoringEnabled,
+                usageAccess = usageStatsReader.hasUsageAccess(),
+            )
+        ) {
+            removeOverlay()
+            return
+        }
 
-        val limitMs = settings.dailyLimitMinutes * MINUTE_MS
+        val limitMs = lockSettings.dailyLimitMinutes * MINUTE_MS
         val budget = BudgetEvaluator.evaluate(totals.totalMs, limitMs, dataAvailable = true)
         if (budget.level == BudgetLevel.EXCEEDED) {
             val warningClaimed = settingsRepository.claimThresholdWarning(
                 LocalDate.now(),
-                settings.dailyLimitMinutes,
+                lockSettings.dailyLimitMinutes,
             )
             if (warningClaimed) Toast.makeText(this, R.string.threshold_warning, Toast.LENGTH_LONG).show()
         }
 
-        val credentialAvailable = keyguardManager.isDeviceSecure || settings.hasPin
+        val credentialAvailable = keyguardManager.isDeviceSecure || lockSettings.hasPin
         val shouldLock = LockPolicy.shouldBlock(
-            mode = settings.reactionMode,
+            mode = lockSettings.reactionMode,
             dataAvailable = true,
             credentialAvailable = credentialAvailable,
-            monitoringEnabled = settings.monitoringEnabled,
+            monitoringEnabled = lockSettings.monitoringEnabled,
             usedMs = totals.totalMs,
             limitMs = limitMs,
-            unlockedUntilMs = settings.unlockedUntilMs,
+            unlockedUntilMs = lockSettings.unlockedUntilMs,
             nowMs = System.currentTimeMillis(),
-            unlockedDay = settings.unlockedDay,
+            unlockedDay = lockSettings.unlockedDay,
             currentDay = LocalDate.now().toString(),
-            unlockedElapsedUntilMs = settings.unlockedElapsedUntilMs,
-            unlockedBootCount = settings.unlockedBootCount,
+            unlockedElapsedUntilMs = lockSettings.unlockedElapsedUntilMs,
+            unlockedBootCount = lockSettings.unlockedBootCount,
             clockReading = clockReading,
-            unlockedDurationMs = settings.unlockedDurationMs,
+            unlockedDurationMs = lockSettings.unlockedDurationMs,
         )
         if (shouldLock) {
-            showLock(totals.totalMs, settings.dailyLimitMinutes, settings.hasPin)
+            showLock(totals.totalMs, lockSettings.dailyLimitMinutes, lockSettings.hasPin)
         } else {
-            val timeLabel = "${formatMinutes(totals.totalMs)} / ${settings.dailyLimitMinutes} min"
-            val lockUnavailable = settings.reactionMode == ReactionMode.LOCK && !credentialAvailable && budget.level == BudgetLevel.EXCEEDED
+            val timeLabel = "${formatMinutes(totals.totalMs)} / ${lockSettings.dailyLimitMinutes} min"
+            val lockUnavailable = lockSettings.reactionMode == ReactionMode.LOCK && !credentialAvailable && budget.level == BudgetLevel.EXCEEDED
             showBadge(BadgeStatus.format(budget.level, timeLabel, lockUnavailable))
         }
     }

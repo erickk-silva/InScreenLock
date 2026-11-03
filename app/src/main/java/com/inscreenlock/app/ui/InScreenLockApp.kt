@@ -196,9 +196,10 @@ fun InScreenLockApp(
                             if (enabled && usageAvailable && accessibilityEnabled) {
                                 scope.launch { settingsRepository.setMonitoringEnabled(true) }
                             } else if (!enabled) {
-                                authenticate { scope.launch { settingsRepository.setMonitoringEnabled(false) } }
+                                scope.launch { settingsRepository.setMonitoringEnabled(false) }
                             }
                         },
+                        onAuthenticate = authenticate,
                     )
                 }
             }
@@ -276,8 +277,21 @@ internal fun DashboardScreen(
     deviceSecure: Boolean,
     onOpenSettings: () -> Unit,
     onMonitoringChanged: (Boolean) -> Unit,
+    onAuthenticate: (() -> Unit) -> Unit,
 ) {
     val credentialAvailable = deviceSecure || settings.hasPin
+    var pendingMonitoringConfirmation by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val requestMonitoringChange: (Boolean) -> Unit = { enabled ->
+        val action = { onMonitoringChanged(enabled) }
+        when {
+            enabled -> action()
+            ProtectedChange.requiresAuthentication(ProtectedChange.DisableMonitoring, credentialAvailable) -> onAuthenticate(action)
+            ProtectedChange.requiresConfirmation(ProtectedChange.DisableMonitoring, credentialAvailable) -> {
+                pendingMonitoringConfirmation = action
+            }
+            else -> action()
+        }
+    }
     val protectionReady = usageAvailable && accessibilityEnabled && settings.monitoringEnabled &&
         (settings.reactionMode == ReactionMode.WARNING || credentialAvailable)
     Column(
@@ -326,7 +340,7 @@ internal fun DashboardScreen(
                     Text("Monitorar apps", color = MainText)
                     Switch(
                         checked = settings.monitoringEnabled && usageAvailable && accessibilityEnabled,
-                        onCheckedChange = onMonitoringChanged,
+                        onCheckedChange = requestMonitoringChange,
                         enabled = usageAvailable && accessibilityEnabled,
                     )
                 }
@@ -337,6 +351,19 @@ internal fun DashboardScreen(
             Text("Configurações e privacidade")
         }
         Spacer(Modifier.height(24.dp))
+    }
+    pendingMonitoringConfirmation?.let { action ->
+        AlertDialog(
+            onDismissRequest = { pendingMonitoringConfirmation = null },
+            title = { Text("Confirmar alteração") },
+            text = { Text("Sem credencial configurada, o bloqueio por limite está indisponível. Deseja desativar o monitoramento?") },
+            confirmButton = {
+                Button(onClick = { pendingMonitoringConfirmation = null; action() }) { Text("Confirmar") }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { pendingMonitoringConfirmation = null }) { Text("Cancelar") }
+            },
+        )
     }
 }
 

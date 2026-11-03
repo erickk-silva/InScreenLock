@@ -13,11 +13,14 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.inscreenlock.app.data.UserSettings
 import com.inscreenlock.app.domain.ReactionMode
 import com.inscreenlock.app.ui.SettingsScreen
+import com.inscreenlock.app.ui.DashboardScreen
+import com.inscreenlock.app.domain.BudgetLevel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -109,6 +112,67 @@ class CredentialLockComposeTest {
         pending.get()?.invoke()
         compose.waitForIdle()
         assertEquals(45, savedLimit.get())
+    }
+
+    @Test fun dashboardDisableWithoutCredentialShowsConfirmationBeforeChangingMonitoring() {
+        val disabledCount = AtomicInteger()
+        compose.activity.runOnUiThread {
+            compose.activity.setContent {
+                MaterialTheme {
+                    DashboardScreen(
+                        settings = UserSettings(monitoringEnabled = true, hasPin = false),
+                        totals = null,
+                        appUsage = null,
+                        budgetLevel = BudgetLevel.UNAVAILABLE,
+                        usageAvailable = true,
+                        accessibilityEnabled = true,
+                        deviceSecure = false,
+                        onOpenSettings = {},
+                        onMonitoringChanged = { if (!it) disabledCount.incrementAndGet() },
+                        onAuthenticate = { it() },
+                    )
+                }
+            }
+        }
+
+        compose.onNode(isToggleable()).performClick()
+        compose.onNodeWithText("Confirmar").assertIsDisplayed()
+        assertEquals(0, disabledCount.get())
+        compose.onNodeWithText("Confirmar").performClick()
+        compose.waitForIdle()
+        assertEquals(1, disabledCount.get())
+    }
+
+    @Test fun dashboardDisableWithCredentialRequiresAuthentication() {
+        val authenticationCount = AtomicInteger()
+        val disabledCount = AtomicInteger()
+        val pending = AtomicReference<(() -> Unit)?>(null)
+        compose.activity.runOnUiThread {
+            compose.activity.setContent {
+                MaterialTheme {
+                    DashboardScreen(
+                        settings = UserSettings(monitoringEnabled = true, hasPin = false),
+                        totals = null,
+                        appUsage = null,
+                        budgetLevel = BudgetLevel.UNAVAILABLE,
+                        usageAvailable = true,
+                        accessibilityEnabled = true,
+                        deviceSecure = true,
+                        onOpenSettings = {},
+                        onMonitoringChanged = { if (!it) disabledCount.incrementAndGet() },
+                        onAuthenticate = { action -> authenticationCount.incrementAndGet(); pending.set(action) },
+                    )
+                }
+            }
+        }
+
+        compose.onNode(isToggleable()).performClick()
+        compose.waitForIdle()
+        assertEquals(1, authenticationCount.get())
+        assertEquals(0, disabledCount.get())
+        pending.get()?.invoke()
+        compose.waitForIdle()
+        assertEquals(1, disabledCount.get())
     }
 
     @Test fun disablingMonitoringWithoutCredentialUsesConfirmationInsteadOfAuthentication() {

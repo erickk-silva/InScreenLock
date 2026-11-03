@@ -16,6 +16,27 @@ class OverlaySessionController(private val host: OverlaySessionHost) {
         private set
     private var transientWindow = false
     private var overlayVisible = false
+    private var reconnectionAttempted = false
+
+    fun resumeFromReconnection(
+        observedForegroundPackage: String?,
+        monitoringAllowed: Boolean,
+        screenInteractive: Boolean,
+        keyguardVisible: Boolean,
+    ): Boolean {
+        if (reconnectionAttempted) return false
+        reconnectionAttempted = true
+        if (targetPackage != null || !monitoringAllowed || !screenInteractive || keyguardVisible) return false
+        val target = ForegroundResolver.resolveWindowEvent(
+            eventPackage = observedForegroundPackage,
+            transientPackages = emptySet(),
+            currentTargetPackage = null,
+        ).targetPackage ?: return false
+        targetPackage = target
+        transientWindow = false
+        loopRunning = true
+        return true
+    }
 
     fun onWindowEvent(eventPackage: String?, transientPackages: Set<String>): WindowForegroundResolution {
         val resolution = ForegroundResolver.resolveWindowEvent(eventPackage, transientPackages, targetPackage)

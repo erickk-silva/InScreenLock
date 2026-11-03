@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import java.time.LocalDate
+import java.time.ZoneId
 
 private val Context.settingsStore by preferencesDataStore(name = "settings")
 
@@ -164,12 +165,14 @@ class SettingsRepository(
 
     suspend fun grantUnlock(day: LocalDate, now: ClockReading = clockReading()) {
         val deadline = StoredDeadline.after(com.inscreenlock.app.domain.UnlockWindow.DURATION_MS, now)
+        val zoneId = ZoneId.systemDefault().id
         store.edit {
             it[UNLOCKED_UNTIL] = deadline.wallDeadlineMs
             it[UNLOCKED_ELAPSED_UNTIL] = deadline.elapsedDeadlineMs
             it[UNLOCKED_BOOT_COUNT] = deadline.bootCount
             it[UNLOCKED_DURATION] = deadline.durationMs
             it[UNLOCKED_DAY] = day.toString()
+            it[UNLOCKED_ZONE_ID] = zoneId
         }
     }
 
@@ -178,20 +181,30 @@ class SettingsRepository(
         val until = snapshot[UNLOCKED_UNTIL] ?: 0L
         val elapsedUntil = snapshot[UNLOCKED_ELAPSED_UNTIL]
         val bootCount = snapshot[UNLOCKED_BOOT_COUNT]
+        val currentZoneId = ZoneId.systemDefault().id
+        val grantIsCurrent = isUnlockGrantCurrent(snapshot[UNLOCKED_DAY], snapshot[UNLOCKED_ZONE_ID], day, currentZoneId)
         val remaining = if (elapsedUntil != null && bootCount != null) {
             StoredDeadline(until, elapsedUntil, bootCount, snapshot[UNLOCKED_DURATION] ?: 0L).remainingUnlockMs(now)
         } else (until - now.wallTimeMs).coerceAtLeast(0L)
-        if (remaining > 0L && snapshot[UNLOCKED_DAY] == day.toString()) return
+        if (remaining > 0L && grantIsCurrent) return
         store.edit { values ->
-            if (remaining == 0L || values[UNLOCKED_DAY] != day.toString()) {
+            if (remaining == 0L || !isUnlockGrantCurrent(values[UNLOCKED_DAY], values[UNLOCKED_ZONE_ID], day, currentZoneId)) {
                 values.remove(UNLOCKED_UNTIL)
                 values.remove(UNLOCKED_ELAPSED_UNTIL)
                 values.remove(UNLOCKED_BOOT_COUNT)
                 values.remove(UNLOCKED_DURATION)
                 values.remove(UNLOCKED_DAY)
+                values.remove(UNLOCKED_ZONE_ID)
             }
         }
     }
+
+    internal fun isUnlockGrantCurrent(
+        unlockedDay: String?,
+        unlockedZoneId: String?,
+        day: LocalDate,
+        zoneId: String,
+    ): Boolean = unlockedDay == day.toString() && unlockedZoneId == zoneId
 
     suspend fun claimThresholdWarning(day: LocalDate, limitMinutes: Int): Boolean {
         var claimed = false
@@ -239,6 +252,7 @@ class SettingsRepository(
         val UNLOCKED_BOOT_COUNT = longPreferencesKey("unlocked_boot_count")
         val UNLOCKED_DURATION = longPreferencesKey("unlocked_duration")
         val UNLOCKED_DAY = stringPreferencesKey("unlocked_day")
+        val UNLOCKED_ZONE_ID = stringPreferencesKey("unlocked_zone_id")
     }
 
     private suspend fun persistRetryDeadline(deadline: StoredDeadline) {

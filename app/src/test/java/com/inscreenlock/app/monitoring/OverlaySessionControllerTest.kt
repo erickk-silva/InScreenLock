@@ -48,6 +48,48 @@ class OverlaySessionControllerTest {
         assertNull(controller.targetPackage)
     }
 
+    @Test fun reconnectResumesTargetOnlyWithConsentUsageAndInteractiveUnlockedScreen() {
+        assertTrue(controller.resumeFromReconnection(instagram, monitoringAllowed = true, screenInteractive = true, keyguardVisible = false))
+        assertEquals(instagram, controller.targetPackage)
+        assertTrue(controller.loopRunning)
+        controller.presentOverlay { true }
+        assertTrue(host.visible)
+
+        val blockedScenarios = listOf(
+            Triple(false, true, false),
+            Triple(true, false, false),
+            Triple(true, true, true),
+        )
+        blockedScenarios.forEach { (allowed, interactive, keyguard) ->
+            val blocked = OverlaySessionController(FakeOverlayHost())
+            assertFalse(blocked.resumeFromReconnection(instagram, allowed, interactive, keyguard))
+            assertNull(blocked.targetPackage)
+            assertFalse(blocked.loopRunning)
+        }
+    }
+
+    @Test fun reconnectIgnoresTransientUnknownAndNullPackagesAndRunsOnce() {
+        for (packageName in listOf("com.android.systemui", "com.example.other", null)) {
+            val fresh = OverlaySessionController(FakeOverlayHost())
+            assertFalse(fresh.resumeFromReconnection(packageName, monitoringAllowed = true, screenInteractive = true, keyguardVisible = false))
+            assertNull(fresh.targetPackage)
+            assertFalse(fresh.loopRunning)
+        }
+
+        val fresh = OverlaySessionController(FakeOverlayHost())
+        assertTrue(fresh.resumeFromReconnection(instagram, true, true, false))
+        assertFalse(fresh.resumeFromReconnection(DailyTimeCalculator.TIKTOK_PACKAGE, true, true, false))
+        assertEquals(instagram, fresh.targetPackage)
+    }
+
+    @Test fun reconnectDoesNotOverwriteSessionStartedByWindowEvent() {
+        controller.onWindowEvent(DailyTimeCalculator.TIKTOK_PACKAGE, emptySet())
+
+        assertFalse(controller.resumeFromReconnection(instagram, monitoringAllowed = true, screenInteractive = true, keyguardVisible = false))
+        assertEquals(DailyTimeCalculator.TIKTOK_PACKAGE, controller.targetPackage)
+        assertTrue(controller.loopRunning)
+    }
+
     private class FakeOverlayHost : OverlaySessionHost {
         var visible = false
         override fun show() { visible = true }

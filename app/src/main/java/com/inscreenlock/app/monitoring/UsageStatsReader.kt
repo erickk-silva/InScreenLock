@@ -59,12 +59,8 @@ class UsageStatsReader(private val context: Context) {
             ?: return null
 
         return runCatching {
-            val usageEvents = manager.queryEvents(UsageWindow.queryStartMs(startOfDayMs), nowMs) ?: return null
-            val signals = mutableListOf<UsageSignal>()
-            val event = UsageEvents.Event()
-            while (usageEvents.hasNextEvent()) {
-                usageEvents.getNextEvent(event)
-                signalFor(event)?.let(signals::add)
+            val signals = UsageWindow.querySignalsWithLookback(startOfDayMs, nowMs) { queryStartMs, queryEndMs ->
+                readSignals(manager, queryStartMs, queryEndMs) ?: error("Usage events unavailable")
             }
             val excludedPackages = excludedPackages()
             val durations = DailyTimeCalculator.calculateByPackage(
@@ -81,20 +77,38 @@ class UsageStatsReader(private val context: Context) {
         }.getOrNull()
     }
 
-    fun recentForegroundPackage(nowMs: Long = System.currentTimeMillis()): String? {
+    fun recentForegroundPackage(nowMs: Long = System.currentTimeMillis()): String? =
+        foregroundPackage(nowMs, FOREGROUND_LOOKBACK_MS)
+
+    /** Bounded historical lookup used only once after a service reconnection. */
+    fun foregroundPackageForReconnection(nowMs: Long = System.currentTimeMillis()): String? {
         if (!hasUsageAccess()) return null
-        val manager = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
-            ?: return null
+        val manager = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return null
         return runCatching {
-            val usageEvents = manager.queryEvents(nowMs - FOREGROUND_LOOKBACK_MS, nowMs) ?: return null
-            val signals = mutableListOf<UsageSignal>()
-            val event = UsageEvents.Event()
-            while (usageEvents.hasNextEvent()) {
-                usageEvents.getNextEvent(event)
-                signalFor(event)?.let(signals::add)
+            val signals = UsageWindow.querySignalsUntilForegroundResolved(nowMs) { startMs, endMs ->
+                readSignals(manager, startMs, endMs) ?: error("Usage events unavailable")
             }
             recentForegroundPackage(signals)
         }.getOrNull()
+    }
+
+    private fun foregroundPackage(nowMs: Long, lookbackMs: Long): String? {
+        if (!hasUsageAccess()) return null
+        val manager = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return null
+        return runCatching {
+            readSignals(manager, (nowMs - lookbackMs).coerceAtLeast(0L), nowMs)?.let(::recentForegroundPackage)
+        }.getOrNull()
+    }
+
+    private fun readSignals(manager: UsageStatsManager, startMs: Long, endMs: Long): List<UsageSignal>? {
+        val usageEvents = manager.queryEvents(startMs, endMs) ?: return null
+        val batch = mutableListOf<UsageSignal>()
+        val event = UsageEvents.Event()
+        while (usageEvents.hasNextEvent()) {
+            usageEvents.getNextEvent(event)
+            signalFor(event)?.let(batch::add)
+        }
+        return batch
     }
 
     private fun excludedPackages(): Set<String> = buildSet {

@@ -8,13 +8,42 @@ import com.inscreenlock.app.domain.ReactionMode
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
+import java.time.Instant
 import java.time.LocalDate
+import java.util.TimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SettingsRepositoryClockTest {
+    @Test fun timezoneChangeClearsUnlockGrantEvenWhenLocalDateIsUnchanged() = runBlocking {
+        val day = LocalDate.of(2026, 11, 2)
+        val now = ClockReading(
+            wallTimeMs = Instant.parse("2026-11-02T18:00:00Z").toEpochMilli(),
+            elapsedRealtimeMs = 10_000,
+            bootCount = 3,
+        )
+        val directory = Files.createTempDirectory("inscreenlock-zone-clock-test").toFile()
+        val repository = SettingsRepository(TestContext(directory)) { now }
+        val originalTimeZone = TimeZone.getDefault()
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone("America/New_York"))
+            repository.grantUnlock(day, now)
+            val grant = repository.settings.first()
+            assertTrue(grant.unlockedUntilMs > now.wallTimeMs)
+            assertFalse(repository.isUnlockGrantCurrent(day.toString(), null, day, "America/New_York"))
+
+            TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+            repository.clearExpiredUnlock(day, now)
+
+            val cleared = repository.settings.first()
+            assertEquals(0L, cleared.unlockedUntilMs)
+        } finally {
+            TimeZone.setDefault(originalTimeZone)
+        }
+    }
+
     @Test fun pinThrottleAndUnlockUseInjectedMonotonicClock() = runBlocking {
         var now = ClockReading(wallTimeMs = 1_000_000, elapsedRealtimeMs = 10_000, bootCount = 3)
         val directory = Files.createTempDirectory("inscreenlock-clock-test").toFile()

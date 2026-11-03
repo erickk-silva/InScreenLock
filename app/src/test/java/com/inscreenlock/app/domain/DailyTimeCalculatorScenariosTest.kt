@@ -262,13 +262,6 @@ class DailyTimeCalculatorScenariosTest {
     }
 
     @Test
-    fun queryLookbackStartsBeforeLocalDayButNeverBeforeEpoch() {
-        val dayStart = 100_000_000L
-        assertEquals(dayStart - 6 * 60 * 60 * 1000L, UsageWindow.queryStartMs(dayStart))
-        assertEquals(0L, UsageWindow.queryStartMs(1_000L))
-    }
-
-    @Test
     fun invalidAndEmptyTimeWindowsReturnZeroWithoutInventingAnActiveApp() {
         assertEquals(UsageTotals(), DailyTimeCalculator.calculate(emptyList(), 0, 100))
         assertEquals(
