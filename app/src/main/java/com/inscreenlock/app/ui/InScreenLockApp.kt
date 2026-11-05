@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
@@ -211,7 +213,11 @@ fun InScreenLockApp(
 private fun ConsentScreen(onContinue: () -> Unit) {
     var consentChecked by remember { mutableStateOf(false) }
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
+        modifier = Modifier.fillMaxSize()
+            .wrapContentWidth(Alignment.CenterHorizontally)
+            .widthIn(max = 640.dp)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.Center,
     ) {
         Text("InScreenLock", color = Mint, style = MaterialTheme.typography.labelLarge)
@@ -295,7 +301,11 @@ internal fun DashboardScreen(
     val protectionReady = usageAvailable && accessibilityEnabled && settings.monitoringEnabled &&
         (settings.reactionMode == ReactionMode.WARNING || credentialAvailable)
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
+        modifier = Modifier.fillMaxSize()
+            .wrapContentWidth(Alignment.CenterHorizontally)
+            .widthIn(max = 640.dp)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp),
     ) {
         Spacer(Modifier.height(24.dp))
         Text("InScreenLock", color = Mint, style = MaterialTheme.typography.labelLarge)
@@ -528,7 +538,11 @@ internal fun SettingsScreen(
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
+        modifier = Modifier.fillMaxSize()
+            .wrapContentWidth(Alignment.CenterHorizontally)
+            .widthIn(max = 640.dp)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp),
     ) {
         Spacer(Modifier.height(24.dp))
         Text("Configurações", color = MainText, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
@@ -764,7 +778,7 @@ private fun PermissionRow(label: String, granted: Boolean) {
 }
 
 @Composable
-private fun InScreenLockTheme(content: @Composable () -> Unit) {
+internal fun InScreenLockTheme(content: @Composable () -> Unit) {
     val colors: ColorScheme = darkColorScheme(
         primary = Mint,
         onPrimary = Background,

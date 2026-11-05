@@ -4,7 +4,6 @@ import android.view.View
 import android.widget.TextView
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.testTag
@@ -24,6 +23,7 @@ import com.inscreenlock.app.monitoring.AppUsageEntry
 import com.inscreenlock.app.monitoring.LockOverlayContent
 import com.inscreenlock.app.ui.AppUsageCard
 import com.inscreenlock.app.ui.DashboardBudgetCard
+import com.inscreenlock.app.ui.InScreenLockTheme
 import java.io.File
 import java.io.FileOutputStream
 import org.junit.Assert.assertTrue
@@ -46,7 +46,7 @@ class VisualStatesCaptureTest {
         cases.forEach { (filename, totals, expected) ->
             activityRule.activity.runOnUiThread {
                 activityRule.activity.setContent {
-                    MaterialTheme {
+                    InScreenLockTheme {
                         DashboardBudgetCard(UserSettings(dailyLimitMinutes = 30), totals, expected.first)
                     }
                 }
@@ -65,7 +65,7 @@ class VisualStatesCaptureTest {
             AppUsageEntry("synthetic.three", "App sintético 3", 5 * MINUTE_MS, null),
         )
         activityRule.activity.runOnUiThread {
-            activityRule.activity.setContent { MaterialTheme { AppUsageCard(apps) } }
+            activityRule.activity.setContent { InScreenLockTheme { AppUsageCard(apps) } }
         }
         activityRule.waitForIdle()
         apps.forEach { activityRule.onNodeWithText(it.label).assertIsDisplayed() }
@@ -83,7 +83,7 @@ class VisualStatesCaptureTest {
                 onUnlock = {},
             )
             activityRule.activity.setContent {
-                MaterialTheme {
+                InScreenLockTheme {
                     AndroidView(
                         factory = { lockPanel },
                         modifier = Modifier.fillMaxWidth().testTag("visual-lock"),
