@@ -81,6 +81,21 @@ class UsageWindowTest {
     }
 
     @Test
+    fun queryLookbackClampsToEpochWhenDayStartIsBeforeInitialLookback() {
+        val dayStart = 2L * HOUR_MS
+        val starts = mutableListOf<Long>()
+
+        UsageWindow.querySignalsWithLookback(dayStart, dayStart + HOUR_MS) { start, _ ->
+            starts += start
+            emptyList()
+        }
+
+        assertEquals(0L, starts.first())
+        assertTrue(starts.all { it >= 0L })
+        assertTrue(starts.all { it >= (dayStart - 7 * DAY_MS).coerceAtLeast(0L) })
+    }
+
+    @Test
     fun doesNotExpandWhenForegroundAndScreenStatesAreResolvedBeforeMidnight() {
         val midnight = 10L * HOUR_MS
         val starts = mutableListOf<Long>()
