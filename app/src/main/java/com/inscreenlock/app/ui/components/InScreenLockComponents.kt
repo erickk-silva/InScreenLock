@@ -51,6 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.graphics.createBitmap
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.res.painterResource
 import com.inscreenlock.app.R
@@ -178,7 +179,7 @@ private fun AndroidDrawableIcon(drawable: android.graphics.drawable.Drawable, de
     val bitmap = androidx.compose.runtime.remember(drawable) {
         val width = drawable.intrinsicWidth.coerceAtLeast(1)
         val height = drawable.intrinsicHeight.coerceAtLeast(1)
-        android.graphics.Bitmap.createBitmap(width.coerceAtMost(192), height.coerceAtMost(192), android.graphics.Bitmap.Config.ARGB_8888).also { bitmap ->
+        createBitmap(width.coerceAtMost(192), height.coerceAtMost(192)).also { bitmap ->
             val canvas = android.graphics.Canvas(bitmap)
             drawable.setBounds(0, 0, canvas.width, canvas.height)
             drawable.draw(canvas)

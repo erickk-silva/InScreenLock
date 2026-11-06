@@ -436,7 +436,7 @@ private fun TrustRow(icon: Int, title: String, detail: String) {
 @Composable
 private fun OnboardingAppIcon(context: Context, packageName: String, fallback: String) {
     val icon = remember(packageName) { runCatching { context.packageManager.getApplicationIcon(packageName) }.getOrNull() }
-    Box(Modifier.size(62.dp).clip(RoundedCornerShape(18.dp)).background(Color(0xFF202833)).border(1.dp, Color(0x553FFFFFFF), RoundedCornerShape(18.dp)), contentAlignment = Alignment.Center) {
+    Box(Modifier.size(62.dp).clip(RoundedCornerShape(18.dp)).background(Color(0xFF202833)).border(1.dp, Color(0x55FFFFFF), RoundedCornerShape(18.dp)), contentAlignment = Alignment.Center) {
         if (icon != null) AndroidView(factory = { ImageView(it).apply { setImageDrawable(icon); contentDescription = fallback } }, modifier = Modifier.fillMaxSize().padding(7.dp))
         else Text("•", color = Muted, style = MaterialTheme.typography.headlineMedium)
     }
