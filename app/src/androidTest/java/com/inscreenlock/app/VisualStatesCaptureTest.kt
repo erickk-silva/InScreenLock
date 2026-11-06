@@ -69,6 +69,9 @@ class VisualStatesCaptureTest {
         }
         activityRule.waitForIdle()
         activityRule.onNodeWithTag("onboarding-start").assertIsDisplayed()
+        activityRule.onNodeWithText("Seus dados ficam neste aparelho", substring = false).assertIsDisplayed()
+        activityRule.onNodeWithText("Só as permissões necessárias", substring = false).assertIsDisplayed()
+        activityRule.onNodeWithText("Não lemos o que você vê ou digita", substring = false).assertIsDisplayed()
         capture("onboarding")
 
         captureDashboard("home-normal-synthetic", BudgetLevel.NORMAL, UsageTotals(12 * MINUTE_MS))

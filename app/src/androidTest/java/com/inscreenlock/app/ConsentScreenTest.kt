@@ -68,6 +68,9 @@ class ConsentScreenTest {
                 }
             }
         }
+        composeRule.onNodeWithText("Seus dados ficam neste aparelho", substring = false).assertIsDisplayed()
+        composeRule.onNodeWithText("Só as permissões necessárias", substring = false).assertIsDisplayed()
+        composeRule.onNodeWithText("Não lemos o que você vê ou digita", substring = false).assertIsDisplayed()
         composeRule.onNodeWithTag("onboarding-skip").performClick()
         composeRule.onNodeWithText("Seu uso, no seu ritmo").assertIsDisplayed()
         composeRule.onNodeWithTag("accessibility-consent").performScrollTo().performClick()

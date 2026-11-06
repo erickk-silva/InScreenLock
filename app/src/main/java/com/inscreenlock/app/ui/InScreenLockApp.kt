@@ -29,6 +29,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -359,13 +360,15 @@ internal fun OnboardingScreen(onSkip: () -> Unit, onStart: () -> Unit, modifier:
             enter = fadeIn(tween(240)) + slideInVertically(tween(240)) { it / 24 },
             modifier = Modifier.fillMaxSize(),
         ) {
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 28.dp, vertical = 56.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                 OnboardingIllustration(context)
-                Spacer(Modifier.height(34.dp))
+                Spacer(Modifier.height(22.dp))
                 Text("Controle seu tempo\nnas redes sociais", color = MainText, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(12.dp))
                 Text("Defina limites, acompanhe o uso e evite o excesso de rolagem.", color = Muted, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
-                Spacer(Modifier.height(28.dp))
+                Spacer(Modifier.height(16.dp))
+                OnboardingTrustCard()
+                Spacer(Modifier.height(20.dp))
                 PrimaryAction("Começar  →", onStart, Modifier.fillMaxWidth().testTag("onboarding-start"))
             }
         }
@@ -381,8 +384,8 @@ internal fun OnboardingScreen(onSkip: () -> Unit, onStart: () -> Unit, modifier:
 
 @Composable
 private fun OnboardingIllustration(context: Context) {
-    Box(Modifier.fillMaxWidth().height(250.dp), contentAlignment = Alignment.Center) {
-        Box(Modifier.size(width = 178.dp, height = 214.dp).rotate(12f).clip(RoundedCornerShape(28.dp)).background(Brush.linearGradient(listOf(Color(0xFF22303C), Color(0xFF101820), Color(0xFF17242B)))).border(1.dp, Color(0x8853CDB8), RoundedCornerShape(28.dp))) {
+    Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(width = 168.dp, height = 192.dp).rotate(12f).clip(RoundedCornerShape(28.dp)).background(Brush.linearGradient(listOf(Color(0xFF22303C), Color(0xFF101820), Color(0xFF17242B)))).border(1.dp, Color(0x8853CDB8), RoundedCornerShape(28.dp))) {
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                 OnboardingAppIcon(context, "com.zhiliaoapp.musically", "TikTok")
                 Spacer(Modifier.height(16.dp))
@@ -391,6 +394,28 @@ private fun OnboardingIllustration(context: Context) {
         }
         Box(Modifier.align(Alignment.BottomCenter).offset(x = 75.dp, y = (-2).dp).size(62.dp).clip(RoundedCornerShape(22.dp)).background(Color(0xFF102C2B)).border(1.dp, Mint, RoundedCornerShape(22.dp)), contentAlignment = Alignment.Center) {
             Image(painterResource(R.drawable.ic_lock_symbol), contentDescription = null, modifier = Modifier.size(32.dp))
+        }
+    }
+}
+
+@Composable
+private fun OnboardingTrustCard() {
+    SurfaceCard(Modifier.fillMaxWidth().testTag("onboarding-trust-card")) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            TrustRow(R.drawable.ic_trust_device, "Seus dados ficam neste aparelho", "Sem conta, internet ou anúncios.")
+            TrustRow(R.drawable.ic_trust_permissions, "Só as permissões necessárias", "Acesso de uso e Acessibilidade: você ativa e pode desligar nas Configurações.")
+            TrustRow(R.drawable.ic_trust_visibility, "Não lemos o que você vê ou digita", "Lemos só o tempo de uso e o nome do app aberto.")
+        }
+    }
+}
+
+@Composable
+private fun TrustRow(icon: Int, title: String, detail: String) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Icon(painterResource(icon), contentDescription = null, tint = Mint, modifier = Modifier.size(22.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Text(title, color = MainText, style = MaterialTheme.typography.titleSmall)
+            Text(detail, color = Muted, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
