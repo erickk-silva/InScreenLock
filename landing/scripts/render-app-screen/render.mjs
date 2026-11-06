@@ -1,0 +1,16 @@
+import { createRequire } from 'node:module';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const here = path.dirname(fileURLToPath(import.meta.url));
+const require = createRequire(path.resolve(here, '../../../.agent-harness/artifacts/ISL-LANDING-001/20261106T200700Z/rb/tmp/package.json'));
+const { chromium } = require('playwright');
+const browser = await chromium.launch({ headless: true, executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
+const page = await browser.newPage({ viewport: { width: 440, height: 967 }, deviceScaleFactor: 1080 / 440 });
+await page.goto(`file://${path.join(here, 'index.html')}`);
+await page.screenshot({ path: path.resolve(here, '../../public/app-screens/dashboard-demo.png') });
+await browser.close();
+const posterPath = path.resolve(here, '../../public/app-screens/phone-poster.svg');
+const poster = await fs.readFile(posterPath, 'utf8');
+const screen = await fs.readFile(path.resolve(here, '../../public/app-screens/dashboard-demo.png'));
+await fs.writeFile(posterPath, poster.replace(/href="(?:\/app-screens\/dashboard-demo\.png|data:image\/png;base64,[^"]+)"/, `href="data:image/png;base64,${screen.toString('base64')}"`));
