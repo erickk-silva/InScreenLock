@@ -30,6 +30,8 @@ import com.inscreenlock.app.domain.DailyTimeCalculator
 import com.inscreenlock.app.domain.MonitoringGate
 import com.inscreenlock.app.domain.ReactionMode
 import com.inscreenlock.app.domain.LockPolicy
+import com.inscreenlock.app.domain.RefreshDisplayPolicy
+import com.inscreenlock.app.domain.StoredDeadline
 import com.inscreenlock.app.monitoring.UsageStatsReader
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -42,6 +44,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
+import java.time.ZoneId
 
 class AccessibilityMonitorService : AccessibilityService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -54,6 +57,7 @@ class AccessibilityMonitorService : AccessibilityService() {
     private var overlay: View? = null
     private var overlayIsLock = false
     private var refreshJob: kotlinx.coroutines.Job? = null
+    private var lastDecisionShouldLock = false
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -151,6 +155,7 @@ class AccessibilityMonitorService : AccessibilityService() {
             refreshJob?.cancel()
             removeOverlay()
         } else {
+            lastDecisionShouldLock = false
             startRefreshLoop()
         }
     }
@@ -161,7 +166,7 @@ class AccessibilityMonitorService : AccessibilityService() {
             if (initialDelayMs > 0) delay(initialDelayMs)
             while (isActive && currentTargetPackage != null) {
                 refreshOverlay()
-                if (currentTargetPackage != null) delay(REFRESH_INTERVAL_MS)
+                if (currentTargetPackage != null) delay(RefreshDisplayPolicy.refreshIntervalMs(lastDecisionShouldLock))
             }
         }
     }
@@ -230,6 +235,7 @@ class AccessibilityMonitorService : AccessibilityService() {
         val clockReading = settingsRepository.clockReading()
         settingsRepository.clearExpiredUnlock(LocalDate.now(), clockReading)
         if (totals == null) {
+            lastDecisionShouldLock = false
             showBadge("Contagem indisponível")
             return
         }
@@ -272,12 +278,29 @@ class AccessibilityMonitorService : AccessibilityService() {
             clockReading = clockReading,
             unlockedDurationMs = lockSettings.unlockedDurationMs,
         )
+        lastDecisionShouldLock = shouldLock
         if (shouldLock) {
             showLock(totals.totalMs, lockSettings.dailyLimitMinutes, lockSettings.hasPin)
         } else {
             val timeLabel = "${formatMinutes(totals.totalMs)} / ${lockSettings.dailyLimitMinutes} min"
             val lockUnavailable = lockSettings.reactionMode == ReactionMode.LOCK && !credentialAvailable && budget.level == BudgetLevel.EXCEEDED
-            showBadge(BadgeStatus.format(budget.level, timeLabel, lockUnavailable))
+            val unlockBadge = if (
+                lockSettings.reactionMode == ReactionMode.LOCK && budget.level == BudgetLevel.EXCEEDED && credentialAvailable
+            ) {
+                RefreshDisplayPolicy.activeUnlockBadgeText(
+                    deadline = StoredDeadline(
+                        wallDeadlineMs = lockSettings.unlockedUntilMs,
+                        elapsedDeadlineMs = lockSettings.unlockedElapsedUntilMs,
+                        bootCount = lockSettings.unlockedBootCount,
+                        durationMs = lockSettings.unlockedDurationMs,
+                    ),
+                    unlockedDay = lockSettings.unlockedDay,
+                    currentDay = LocalDate.now().toString(),
+                    clockReading = clockReading,
+                    zoneId = ZoneId.systemDefault(),
+                )
+            } else null
+            showBadge(unlockBadge ?: BadgeStatus.format(budget.level, timeLabel, lockUnavailable))
         }
     }
 
@@ -371,7 +394,6 @@ class AccessibilityMonitorService : AccessibilityService() {
     private fun formatMinutes(milliseconds: Long): String = "${milliseconds / MINUTE_MS} min"
 
     private companion object {
-        const val REFRESH_INTERVAL_MS = 10_000L
         const val TRANSIENT_RECONFIRM_DELAY_MS = 1_500L
         const val MINUTE_MS = 60_000L
         val OWN_ACTIVITY_CLASS_NAMES = setOf(MainActivity::class.java.name, UnlockActivity::class.java.name)

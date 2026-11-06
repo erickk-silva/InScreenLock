@@ -54,7 +54,7 @@ class VisualStatesCaptureTest {
             activityRule.waitForIdle()
             activityRule.onNodeWithText(expected.second).assertIsDisplayed()
             if (expected.first == BudgetLevel.EXCEEDED) {
-                activityRule.onNodeWithText("9min acima da meta").assertIsDisplayed()
+                activityRule.onNodeWithText("9 min acima da meta").assertIsDisplayed()
             }
             capture(filename)
         }
