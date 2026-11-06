@@ -466,6 +466,7 @@ internal fun DashboardScreen(
                         checked = settings.monitoringEnabled && usageAvailable && accessibilityEnabled,
                         onCheckedChange = requestMonitoringChange,
                         enabled = usageAvailable && accessibilityEnabled,
+                        modifier = Modifier.testTag("dashboard-monitoring-switch"),
                     )
                 }
             }
@@ -555,11 +556,6 @@ private fun AppUsageRow(entry: AppUsageEntry) {
 
 @Composable
 internal fun DashboardBudgetCard(settings: UserSettings, totals: UsageTotals?, budgetLevel: BudgetLevel, usageAccessGranted: Boolean = true) {
-    val progressColor = when (budgetLevel) {
-        BudgetLevel.ATTENTION -> Exceeded
-        BudgetLevel.EXCEEDED -> Exceeded
-        else -> Mint
-    }
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("Tempo combinado · Instagram + TikTok", color = Muted, style = MaterialTheme.typography.bodyMedium)
@@ -581,13 +577,6 @@ internal fun DashboardBudgetCard(settings: UserSettings, totals: UsageTotals?, b
             }
             Spacer(Modifier.height(12.dp))
             Text("Meta diária", color = Muted)
-            val status = when (budgetLevel) {
-                BudgetLevel.NORMAL -> "Dentro do combinado"
-                BudgetLevel.ATTENTION -> "Atenção: perto do limite"
-                BudgetLevel.EXCEEDED -> "Limite diário alcançado"
-                BudgetLevel.UNAVAILABLE -> if (usageAccessGranted) "O Android não disponibilizou dados de uso agora." else "Conceda Acesso de uso para consultar o total."
-            }
-            Text(status, color = progressColor, style = MaterialTheme.typography.titleSmall, textAlign = TextAlign.Center)
             if (totals != null && budgetLevel != BudgetLevel.UNAVAILABLE) {
                 val remaining = settings.dailyLimitMinutes * MINUTE_MS - totals.totalMs
                 Spacer(Modifier.height(4.dp))

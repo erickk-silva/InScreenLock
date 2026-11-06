@@ -88,7 +88,7 @@ class CredentialLockComposeTest {
             }
         }
 
-        compose.onNode(isToggleable()).performClick()
+        compose.onNodeWithTag("dashboard-monitoring-switch").performClick()
         compose.onNodeWithText("Confirmar").assertIsDisplayed()
         assertEquals(0, disabledCount.get())
         compose.onNodeWithText("Confirmar").performClick()
@@ -164,8 +164,8 @@ class CredentialLockComposeTest {
         }
         compose.onNodeWithTag("reaction-LOCK").assertIsDisplayed().performClick()
         compose.onNodeWithTag("reaction-WARNING").assertIsDisplayed().performClick()
-        compose.onNodeWithText("Aviso discreto").assertIsDisplayed()
-        compose.onNodeWithText("Bloqueio com senha").assertIsDisplayed()
+        compose.onNodeWithText("Apenas aviso discreto").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Bloqueio com senha").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun settingsPinFieldsMaskDigitsAndLimitInput() {
