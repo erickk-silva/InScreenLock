@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -104,7 +105,7 @@ enum class ProgressLevel { NORMAL, ATTENTION, EXCEEDED }
 fun ProgressRing(progress: Float, valueLabel: String, modifier: Modifier = Modifier, level: ProgressLevel = ProgressLevel.NORMAL, contentDescription: String = valueLabel, content: (@Composable () -> Unit)? = null) {
     val ringColor = when (level) {
         ProgressLevel.NORMAL -> MaterialTheme.colorScheme.primary
-        ProgressLevel.ATTENTION -> Color(0xFFFFC857)
+        ProgressLevel.ATTENTION -> MaterialTheme.colorScheme.tertiary
         ProgressLevel.EXCEEDED -> MaterialTheme.colorScheme.tertiary
     }
     val trackColor = MaterialTheme.colorScheme.surfaceVariant
@@ -164,7 +165,7 @@ enum class BannerLevel { INFO, WARNING, ERROR }
 fun StatusBanner(message: String, level: BannerLevel, modifier: Modifier = Modifier, title: String? = null, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
     val color = when (level) {
         BannerLevel.INFO -> MaterialTheme.colorScheme.primary
-        BannerLevel.WARNING -> Color(0xFFFFC857)
+        BannerLevel.WARNING -> MaterialTheme.colorScheme.tertiary
         BannerLevel.ERROR -> MaterialTheme.colorScheme.error
     }
     Surface(modifier = modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = color.copy(alpha = 0.12f), contentColor = MaterialTheme.colorScheme.onSurface) {
@@ -211,7 +212,7 @@ fun PermissionRow(label: String, isActive: Boolean, onAction: () -> Unit, modifi
 @Composable
 fun PinInput(digitCount: Int, onDigit: (Int) -> Unit, onBackspace: () -> Unit, modifier: Modifier = Modifier, enteredCount: Int = 0, enabled: Boolean = true, digitDescription: String = "dígito") {
     Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.semantics { contentDescription = "${enteredCount.coerceIn(0, digitCount)} de $digitCount dígitos digitados" }) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.semantics { contentDescription = "${enteredCount.coerceIn(0, digitCount)} de $digitCount dígitos digitados" }.testTag("pin-display")) {
             repeat(digitCount.coerceAtLeast(0)) { index ->
                 Box(Modifier.size(width = 42.dp, height = 48.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clearAndSetSemantics { }, contentAlignment = Alignment.Center) {
                     if (index < enteredCount) Box(Modifier.size(10.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
@@ -224,7 +225,7 @@ fun PinInput(digitCount: Int, onDigit: (Int) -> Unit, onBackspace: () -> Unit, m
                 row.forEach { digit ->
                     val label = when (digit) { -1 -> ""; -2 -> "Apagar"; else -> digit.toString() }
                     Surface(
-                        modifier = Modifier.size(64.dp).clickable(enabled = enabled, role = Role.Button) { if (digit == -2) onBackspace() else if (digit >= 0) onDigit(digit) }.semantics { contentDescription = if (digit >= 0) "$digit, $digitDescription" else label },
+                        modifier = Modifier.size(64.dp).clickable(enabled = enabled, role = Role.Button) { if (digit == -2) onBackspace() else if (digit >= 0) onDigit(digit) }.semantics { contentDescription = if (digit >= 0) "$digit, $digitDescription" else label }.then(when { digit >= 0 -> Modifier.testTag("pin-digit-$digit"); digit == -2 -> Modifier.testTag("pin-delete"); else -> Modifier }),
                         shape = CircleShape,
                         color = if (digit == -1) Color.Transparent else MaterialTheme.colorScheme.surface,
                     ) { Box(contentAlignment = Alignment.Center) { if (digit == -2) Text("⌫", style = MaterialTheme.typography.titleLarge) else Text(label, style = MaterialTheme.typography.titleLarge) } }

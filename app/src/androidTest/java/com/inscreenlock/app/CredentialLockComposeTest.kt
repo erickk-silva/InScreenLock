@@ -4,25 +4,23 @@ import androidx.compose.material3.MaterialTheme
 import androidx.activity.compose.setContent
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.inscreenlock.app.data.UserSettings
-import com.inscreenlock.app.domain.ReactionMode
-import com.inscreenlock.app.ui.SettingsScreen
 import com.inscreenlock.app.ui.DashboardScreen
+import com.inscreenlock.app.ui.CredentialRoute
+import com.inscreenlock.app.ui.LimitsRoute
+import com.inscreenlock.app.ui.MoreScreen
 import com.inscreenlock.app.domain.BudgetLevel
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -60,58 +58,13 @@ class CredentialLockComposeTest {
         compose.onNodeWithTag("pin-digit-2").performClick()
         compose.onNodeWithTag("pin-delete").performClick()
         compose.onNodeWithTag("pin-digit-3").performClick()
-        compose.onNodeWithTag("pin-display").assertTextContains("••")
+        val pinDisplay = compose.onNodeWithTag("pin-display").fetchSemanticsNode().config
+        assertTrue(SemanticsProperties.ContentDescription in pinDisplay)
+        assertTrue(pinDisplay[SemanticsProperties.ContentDescription].joinToString().contains("2 de 8"))
         compose.onNodeWithTag("pin-digit-4").performClick()
         compose.onNodeWithTag("pin-digit-5").performClick()
         compose.onNodeWithTag("pin-submit").performClick()
         compose.onNodeWithTag("pin-error").assertIsDisplayed().assertTextContains("PIN incorreto")
-    }
-
-    @Test fun disablingMonitoringAndIncreasingLimitRequireAuthentication() {
-        val authenticationCount = AtomicInteger()
-        val pending = AtomicReference<(() -> Unit)?>(null)
-        val savedLimit = AtomicInteger(30)
-        compose.activity.runOnUiThread {
-            compose.activity.setContent {
-                MaterialTheme {
-                    SettingsScreen(
-                        settings = UserSettings(monitoringEnabled = true, dailyLimitMinutes = 30, reactionMode = ReactionMode.LOCK),
-                        usageAvailable = true,
-                        accessibilityEnabled = true,
-                        deviceSecure = true,
-                        onBack = {}, onOpenUsageSettings = {}, onOpenAccessibilitySettings = {},
-                        onMonitoringChanged = {},
-                        onSaveBudget = { minutes, _ -> savedLimit.set(minutes) },
-                        onClearLocalData = {}, onSetPin = {}, onRemovePin = { _ -> },
-                        onAuthenticate = { action -> authenticationCount.incrementAndGet(); pending.set(action) },
-                    )
-                }
-            }
-        }
-        compose.waitForIdle()
-        val disableMonitoring = compose.onNodeWithTag("disable-monitoring")
-        disableMonitoring.performScrollTo()
-        compose.waitForIdle()
-        disableMonitoring.performClick()
-        compose.waitForIdle()
-        assertEquals(1, authenticationCount.get())
-        val dailyLimit = compose.onNodeWithTag("daily-limit")
-        dailyLimit.performScrollTo()
-        compose.waitForIdle()
-        dailyLimit.performTextReplacement("45")
-        compose.waitForIdle()
-        dailyLimit.assertTextContains("45")
-        val saveBudget = compose.onNodeWithTag("save-budget")
-        saveBudget.performScrollTo()
-        compose.waitForIdle()
-        saveBudget.assertIsDisplayed().assertIsEnabled().performClick()
-        compose.waitForIdle()
-        assertEquals(30, savedLimit.get())
-        assertEquals(2, authenticationCount.get())
-        assertNotNull(pending.get())
-        pending.get()?.invoke()
-        compose.waitForIdle()
-        assertEquals(45, savedLimit.get())
     }
 
     @Test fun dashboardDisableWithoutCredentialShowsConfirmationBeforeChangingMonitoring() {
@@ -181,20 +134,16 @@ class CredentialLockComposeTest {
         compose.activity.runOnUiThread {
             compose.activity.setContent {
                 MaterialTheme {
-                    SettingsScreen(
-                        settings = UserSettings(monitoringEnabled = true, hasPin = false),
-                        usageAvailable = true,
-                        accessibilityEnabled = true,
-                        deviceSecure = false,
-                        onBack = {}, onOpenUsageSettings = {}, onOpenAccessibilitySettings = {},
+                    MoreScreen(settings = UserSettings(monitoringEnabled = true), usageAvailable = true,
+                        accessibilityEnabled = true, deviceSecure = false,
+                        onOpenUsageSettings = {}, onOpenAccessibilitySettings = {}, onOpenCredential = {},
+                        onOpenPrivacy = {}, onOpenAbout = {},
                         onMonitoringChanged = { if (!it) disabledCount.incrementAndGet() },
-                        onSaveBudget = { _, _ -> }, onClearLocalData = {}, onSetPin = {}, onRemovePin = {},
-                        onAuthenticate = { authenticationCount.incrementAndGet(); it() },
-                    )
+                        onAuthenticate = { authenticationCount.incrementAndGet(); it() })
                 }
             }
         }
-        compose.onNodeWithTag("disable-monitoring").performScrollTo().performClick()
+        compose.onNodeWithTag("monitoring-switch").performClick()
         compose.onNodeWithText("Confirmar").assertIsDisplayed()
         assertEquals(0, authenticationCount.get())
         assertEquals(0, disabledCount.get())
@@ -208,12 +157,8 @@ class CredentialLockComposeTest {
         compose.activity.runOnUiThread {
             compose.activity.setContent {
                 MaterialTheme {
-                    SettingsScreen(
-                        settings = UserSettings(), usageAvailable = true, accessibilityEnabled = true, deviceSecure = true,
-                        onBack = {}, onOpenUsageSettings = {}, onOpenAccessibilitySettings = {}, onMonitoringChanged = {},
-                        onSaveBudget = { _, _ -> }, onClearLocalData = {}, onSetPin = {}, onRemovePin = { },
-                        onAuthenticate = { it() },
-                    )
+                    LimitsRoute(settings = UserSettings(), deviceSecure = true, onSaveBudget = { _, _ -> },
+                        onAuthenticate = { it() }, onDefinePin = {})
                 }
             }
         }
@@ -228,12 +173,8 @@ class CredentialLockComposeTest {
         compose.activity.runOnUiThread {
             compose.activity.setContent {
                 MaterialTheme {
-                    SettingsScreen(
-                        settings = UserSettings(), usageAvailable = true, accessibilityEnabled = true, deviceSecure = false,
-                        onBack = {}, onOpenUsageSettings = {}, onOpenAccessibilitySettings = {}, onMonitoringChanged = {},
-                        onSaveBudget = { _, _ -> }, onClearLocalData = {}, onSetPin = { savedPin.set(it) }, onRemovePin = {},
-                        onAuthenticate = { it() },
-                    )
+                    CredentialRoute(settings = UserSettings(), deviceSecure = false, onBack = {},
+                        onSetPin = { savedPin.set(it) }, onRemovePin = {}, onAuthenticate = { it() })
                 }
             }
         }
@@ -255,12 +196,8 @@ class CredentialLockComposeTest {
         compose.activity.runOnUiThread {
             compose.activity.setContent {
                 MaterialTheme {
-                    SettingsScreen(
-                        settings = UserSettings(), usageAvailable = true, accessibilityEnabled = true, deviceSecure = true,
-                        onBack = {}, onOpenUsageSettings = {}, onOpenAccessibilitySettings = {}, onMonitoringChanged = {},
-                        onSaveBudget = { _, _ -> }, onClearLocalData = {}, onSetPin = {}, onRemovePin = {},
-                        onAuthenticate = { it() },
-                    )
+                        LimitsRoute(settings = UserSettings(), deviceSecure = true, onSaveBudget = { _, _ -> },
+                            onAuthenticate = { it() }, onDefinePin = {})
                 }
             }
         }

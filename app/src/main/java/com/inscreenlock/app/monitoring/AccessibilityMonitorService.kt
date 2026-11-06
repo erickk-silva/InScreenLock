@@ -314,9 +314,9 @@ class AccessibilityMonitorService : AccessibilityService() {
         val badge = TextView(this).apply {
             this.text = text
             textSize = 14f
-            setTextColor(Color.rgb(242, 245, 247))
+            setTextColor(Color.rgb(230, 234, 240))
             setPadding(dp(14), dp(9), dp(14), dp(9))
-            background = roundedBackground(Color.argb(235, 27, 32, 41))
+            background = roundedBackground(Color.rgb(31, 35, 43))
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
         }
         presentOverlay { addOverlay(badge, pause = false) }
@@ -386,7 +386,7 @@ class AccessibilityMonitorService : AccessibilityService() {
     private fun roundedBackground(color: Int) = GradientDrawable().apply {
         setColor(color)
         cornerRadius = dp(22).toFloat()
-        setStroke(dp(1), Color.rgb(48, 56, 69))
+        setStroke(dp(1), Color.rgb(81, 92, 106))
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()

@@ -2,7 +2,7 @@
     <string name="accessibility_service_name">InScreenLock</string>
     <string name="accessibility_service_description">Recebe notificações de mudança de janela de qualquer app e lê somente o nome do pacote para identificar entradas e saídas do Instagram e TikTok; descarta os demais e não guarda esses dados.</string>
     <string name="threshold_warning">Você alcançou seu limite diário nos apps.</string>
-    <string name="lock_title">Limite diário alcançado</string>
+    <string name="lock_title">Limite atingido</string>
     <string name="lock_summary">%1$s usados de %2$d min hoje.</string>
     <string name="lock_home">Ir para o início</string>
     <string name="lock_unlock">Desbloquear</string>
