@@ -1,76 +1,104 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import dynamic from 'next/dynamic';
-import Image from 'next/image';
-import { ArrowDown, ArrowRight, Ban, CircleAlert, CirclePlay, Layers3, LockKeyhole, Menu, ShieldCheck } from 'lucide-react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { ArrowDown, ArrowRight, Ban, CircleAlert, CirclePlay, Layers3, ShieldCheck } from 'lucide-react';
 import Aurora from './react-bits/Aurora';
 import SplitText from './react-bits/SplitText';
+import BlurText from './react-bits/BlurText';
+import ShinyText from './react-bits/ShinyText';
+import StarBorder from './react-bits/StarBorder';
+import ClickSpark from './react-bits/ClickSpark';
 import AnimatedContent from './react-bits/AnimatedContent';
 import Magnet from './react-bits/Magnet';
 import SpotlightCard from './react-bits/SpotlightCard';
+import PhoneExperience from './phone-3d/PhoneExperience';
+import SiteHeader from './SiteHeader';
+import { AndroidGlyph, LockGlyph } from './HeroGlyphs';
+import { useAfter } from '@/hooks/useAfter';
+import { usePointerParallax } from '@/hooks/usePointerParallax';
+import { prefersReducedMotion } from '@/lib/motion-preference';
 import { release } from '@/lib/release';
 
-const PhoneExperience = dynamic(() => import('./phone-3d/PhoneExperience'), { ssr: false, loading: () => <Image className="phone-poster" src="/app-screens/phone-poster.svg" alt="Demonstração fictícia da tela Início do InScreenLock, com 21 minutos usados e meta de 17 minutos." fill unoptimized priority /> });
-const links = [['Como funciona', '#como-funciona'], ['Recursos', '#recursos'], ['Privacidade', '#privacidade'], ['FAQ', '#faq']];
+const SUBHEADLINE = 'Defina limites para suas redes, acompanhe seus hábitos e escolha a hora de parar.';
+const delayed = (ms: number) => ({ '--d': `${ms}ms` }) as CSSProperties;
+const MINT_GRADIENT = 'linear-gradient(135deg, #22e3b0 0%, #16c79a 100%)';
+const GLASS_MINT = { '--spotlight-card-surface': 'rgba(12, 28, 27, .3)', '--spotlight-card-border': 'linear-gradient(140deg, rgba(34,227,176,.85), rgba(34,227,176,.12) 55%, rgba(34,227,176,.38))', '--spotlight-card-shadow': 'inset 0 1px 0 rgba(255,255,255,.26), inset 0 -18px 30px -24px rgba(34,227,176,.28), 0 26px 60px -22px rgba(34,227,176,.42), 0 10px 24px -12px rgba(0,0,0,.55)' } as CSSProperties;
+const GLASS_CORAL = { '--spotlight-card-surface': 'rgba(40, 20, 26, .32)', '--spotlight-card-border': 'linear-gradient(140deg, rgba(255,107,122,.9), rgba(255,107,122,.14) 55%, rgba(255,107,122,.42))', '--spotlight-card-shadow': 'inset 0 1px 0 rgba(255,255,255,.22), inset 0 -18px 30px -24px rgba(255,107,122,.3), 0 26px 60px -22px rgba(255,84,97,.5), 0 10px 24px -12px rgba(0,0,0,.55)' } as CSSProperties;
+const LINE_FROM = { opacity: 0, y: '.5em', filter: 'blur(12px)' };
+const LINE_TO = { opacity: 1, y: 0, filter: 'blur(0px)' };
 
-function BrandMark() {
-  return <svg className="brand-mark" viewBox="0 0 56 56" aria-hidden="true"><rect x="1" y="1" width="54" height="54" rx="16" fill="#07120f" stroke="#12634f" strokeWidth="2"/><circle cx="28" cy="28" r="17" fill="none" stroke="#22e3b0" strokeWidth="5"/><path d="M28 24v14" stroke="#e6eaf0" strokeWidth="4" strokeLinecap="round"/><circle cx="28" cy="17" r="2.4" fill="#e6eaf0"/><path d="M39 12l4-3" stroke="#22e3b0" strokeWidth="2" strokeLinecap="round"/></svg>;
+function AccentLine() {
+  const ready = useAfter(270);
+  const text = 'Seu tempo tem.';
+  return ready
+    ? <SplitText tag="span" text={text} className="h1-fragment" trigger="load" splitType="chars" delay={26} duration={.85} textAlign="left" from={LINE_FROM} to={LINE_TO} />
+    : <span className="h1-fragment" style={{ visibility: 'hidden' }}>{text}</span>;
 }
 
-function AndroidGlyph({ size = 25 }: { size?: number }) {
-  return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M7.1 8.4 5.5 5.7l.9-.5L8 7.9a9 9 0 0 1 8 0l1.6-2.7.9.5-1.6 2.7a7.6 7.6 0 0 1 3.2 5.9H3.9a7.6 7.6 0 0 1 3.2-5.9ZM8 11.5a.8.8 0 1 0 0 1.6.8.8 0 0 0 0-1.6Zm8 0a.8.8 0 1 0 0 1.6.8.8 0 0 0 0-1.6ZM5 15.4h14v4.1a1.5 1.5 0 0 1-1.5 1.5H6.5A1.5 1.5 0 0 1 5 19.5v-4.1ZM2 15.4h2v4.2H2zm18 0h2v4.2h-2zM8 21.5h2v1.8H8zm6 0h2v1.8h-2z"/></svg>;
-}
-
-function SiteHeader() {
-  const [open, setOpen] = useState(false);
-  return <header className="site-header"><a className="brand" href="#inicio" aria-label="InScreenLock — início"><BrandMark/><span>InScreenLock</span></a>
-    <nav className="desktop-nav" aria-label="Navegação principal">{links.map(([label, href]) => <a key={href} href={href}>{label}</a>)}</nav>
-    <a className="header-download" href="#download"><AndroidGlyph size={22}/> Baixar app</a>
-    <button className="menu-toggle" aria-label={open ? 'Fechar menu' : 'Abrir menu'} aria-expanded={open} aria-controls="mobile-navigation" onClick={() => setOpen(!open)}><Menu size={24}/></button>
-    {open && <nav className="mobile-nav" id="mobile-navigation" aria-label="Navegação móvel">{links.map(([label, href]) => <a key={href} href={href} onClick={() => setOpen(false)}>{label}</a>)}<a href="#download" onClick={() => setOpen(false)}>Baixar app</a></nav>}
-  </header>;
-}
-
-function Benefits() {
-  return <AnimatedContent className="benefits" trigger="mount" distance={10} duration={.55} stagger={.08}>
-    <span className="benefit"><ShieldCheck aria-hidden="true"/>Sem conta</span><span className="benefit-dot" aria-hidden="true">•</span>
-    <span className="benefit"><Ban aria-hidden="true"/>Sem anúncios</span><span className="benefit-dot" aria-hidden="true">•</span>
-    <span className="benefit"><Layers3 aria-hidden="true"/>100% local</span>
-  </AnimatedContent>;
+function Subheadline() {
+  const ready = useAfter(560);
+  return ready
+    ? <BlurText text={SUBHEADLINE} className="subheadline" trigger="load" animateBy="words" direction="bottom" delay={34} stepDuration={.5} blur={9} distance={14} />
+    : <p className="subheadline" style={{ visibility: 'hidden' }} aria-hidden="true">{SUBHEADLINE}</p>;
 }
 
 export default function Hero() {
-  const finePointer = typeof window !== 'undefined' && window.matchMedia('(pointer: fine)').matches;
-  useEffect(() => { if (new URLSearchParams(location.search).has('visualTest')) document.documentElement.classList.add('visual-test'); return () => document.documentElement.classList.remove('visual-test'); }, []);
-  return <div className="landing" id="inicio">
+  const landing = useRef<HTMLDivElement>(null);
+  const [limitReached, setLimitReached] = useState(false);
+  const [finePointer, setFinePointer] = useState(false);
+  useEffect(() => {
+    if (new URLSearchParams(location.search).has('visualTest')) document.documentElement.classList.add('visual-test');
+    const reduced = prefersReducedMotion();
+    // the "Limite alcançado" card follows the ring crossing the goal; this is a safety net so it can never stay hidden
+    const safety = window.setTimeout(() => setLimitReached(true), reduced ? 0 : 5000);
+    const pointer = window.matchMedia('(pointer: fine)');
+    const sync = () => setFinePointer(pointer.matches);
+    sync(); pointer.addEventListener('change', sync);
+    return () => { document.documentElement.classList.remove('visual-test'); window.clearTimeout(safety); pointer.removeEventListener('change', sync); };
+  }, []);
+  usePointerParallax(landing);
+
+  return <div className="landing" id="inicio" ref={landing}>
     <div className="aurora-glow" aria-hidden="true"><Aurora colorStops={['#16c79a', '#22e3b0', '#087f69']} amplitude={0.55} blend={0.16} speed={0.22} height={0.72} scale={1.3} glow={0.14} brightness={0.7} layers={2} direction="bottom" mouseInteraction={false} intro={false} opacity={0.2} paused dpr={1} /></div>
     <SiteHeader/>
     <main className="hero" aria-labelledby="hero-title">
       <section className="hero-copy">
-        <AnimatedContent trigger="mount" distance={12} duration={.5}><span className="eyebrow">SEU TEMPO, SOB SEU CONTROLE</span></AnimatedContent>
-        <h1 id="hero-title" aria-label="Seu feed não tem fim. Seu tempo tem."><span className="h1-line"><SplitText text="Seu feed não tem fim." className="h1-fragment" trigger="load" splitType="words" delay={20} duration={.55} effect="rise"/></span><span className="accent h1-line"><SplitText text="Seu tempo tem." className="h1-fragment" trigger="load" splitType="words" delay={120} duration={.6} effect="rise" color="#22e3b0"/></span></h1>
-        <AnimatedContent trigger="mount" distance={14} duration={.6} delay={.1}><p className="subheadline">Defina limites para suas redes, acompanhe seus hábitos e escolha a hora de parar.</p></AnimatedContent>
-        <AnimatedContent className="hero-actions" trigger="mount" distance={10} duration={.55} delay={.18}>
-          <Magnet disabled={!finePointer} maxOffset={5} magnetStrength={8} padding={30} wrapperClassName="magnet-wrap"><a className="button button-primary" href="#download"><AndroidGlyph size={28}/>Baixar para Android<ArrowRight size={28}/></a></Magnet>
+        <span className="eyebrow enter" style={delayed(150)}><ShinyText text="SEU TEMPO, SOB SEU CONTROLE" color="#22e3b0" shineColor="#f2fffb" speed={2.2} delay={9} angle={105} shineWidth={55} softness={.9} glow={.3} /></span>
+        <h1 id="hero-title" aria-label="Seu feed não tem fim. Seu tempo tem.">
+          <span className="h1-line" aria-hidden="true"><SplitText tag="span" text="Seu feed não tem fim." className="h1-fragment" trigger="load" splitType="chars" delay={22} duration={.8} textAlign="left" from={LINE_FROM} to={LINE_TO} /></span>
+          <span className="h1-line h1-accent" aria-hidden="true"><AccentLine/></span>
+        </h1>
+        <Subheadline/>
+        <div className="hero-actions enter" style={delayed(950)}>
+          <ClickSpark sparkColor={['#22e3b0', '#7ffbe0', '#ffffff']} sparkCount={12} sparkRadius={34} sparkSize={9} sparkWidth={2.2} duration={.65} easing="ease-out" shape="streak" glow={.6} style={{ display: 'inline-flex', width: 'auto', height: 'auto' }}>
+            <Magnet disabled={!finePointer} maxOffset={5} magnetStrength={8} padding={30} wrapperClassName="magnet-wrap">
+              <StarBorder as="a" href="#download" className="button button-primary" radius={26} thickness={1.5} duration={5} trailLength={.34} glow={.75} hover="lap" backgroundColor={MINT_GRADIENT} textColor="#04211b" color="#ffffff" trailColor="#b8fff0" borderColor="rgba(255,255,255,.34)"><AndroidGlyph size={28}/>Baixar para Android<ArrowRight size={28}/></StarBorder>
+            </Magnet>
+          </ClickSpark>
           <Magnet disabled={!finePointer} maxOffset={4} magnetStrength={9} padding={25} wrapperClassName="magnet-wrap"><a className="button button-secondary" href="#demo"><span className="play-icon"><CirclePlay size={37}/></span>Ver demonstração</a></Magnet>
+        </div>
+        {release.status === 'preparing' && <p className="release-note enter" style={delayed(1050)} id="download">Download em preparação. O APK será publicado após verificação.</p>}
+        <AnimatedContent className="benefits" trigger="mount" distance={10} duration={.6} delay={1.1} stagger={.07}>
+          <span className="benefit"><ShieldCheck aria-hidden="true"/>Sem conta</span><span className="benefit-dot" aria-hidden="true">•</span>
+          <span className="benefit"><Ban aria-hidden="true"/>Sem anúncios</span><span className="benefit-dot" aria-hidden="true">•</span>
+          <span className="benefit"><Layers3 aria-hidden="true"/>100% local</span>
         </AnimatedContent>
-        {release.status === 'preparing' && <p className="release-note" id="download">Download em preparação. O APK será publicado após verificação.</p>}
-        <Benefits/>
       </section>
       <section className="phone-stage" id="demo" aria-label="Demonstração do aplicativo">
-        <div className="phone-halo" aria-hidden="true"/>
-        <svg className="phone-orbit" viewBox="0 0 700 740" preserveAspectRatio="none" aria-hidden="true">
-          <defs><linearGradient id="orbit-gradient" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stopColor="#16eaba" stopOpacity=".52"/><stop offset=".42" stopColor="#24ffd0"/><stop offset=".76" stopColor="#04d7ad"/><stop offset="1" stopColor="#15f6c5" stopOpacity=".58"/></linearGradient></defs>
-          <path className="phone-orbit-glow" d="M 21 443 C 35 288 211 134 400 126 C 569 119 697 208 683 337 C 670 461 485 592 300 616 C 130 639 6 566 21 443 Z"/>
-          <path className="phone-orbit-line" d="M 21 443 C 35 288 211 134 400 126 C 569 119 697 208 683 337 C 670 461 485 592 300 616 C 130 639 6 566 21 443 Z"/>
-        </svg>
-        <SpotlightCard className="float-card lock-card" spotlightColor="rgba(34,227,176,.18)" intensity={.32} spotlightSize={240} softness={.55}><LockKeyhole className="lock-icon" size={36} fill="currentColor" stroke="#08231e"/><p>Você decide<br/>quando parar.</p></SpotlightCard>
-        <PhoneExperience/>
-        <SpotlightCard className="float-card alert-card" spotlightColor="rgba(255,107,122,.23)" intensity={.4} spotlightSize={260} softness={.5}><CircleAlert size={48}/><span>Limite<br/>alcançado</span></SpotlightCard>
+        <div className="phone-layer phone-layer-far" data-parallax="4" aria-hidden="true"><div className="phone-halo"/><div className="phone-floor"/></div>
+        <div className="phone-layer phone-layer-mid" data-parallax="7" aria-hidden="true">
+          <svg className="phone-orbit" viewBox="0 0 700 740" preserveAspectRatio="none">
+            <defs><linearGradient id="orbit-gradient" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stopColor="#16eaba" stopOpacity=".52"/><stop offset=".42" stopColor="#24ffd0"/><stop offset=".76" stopColor="#04d7ad"/><stop offset="1" stopColor="#15f6c5" stopOpacity=".58"/></linearGradient></defs>
+            <path className="phone-orbit-glow" pathLength="1" d="M 21 443 C 35 288 211 134 400 126 C 569 119 697 208 683 337 C 670 461 485 592 300 616 C 130 639 6 566 21 443 Z"/>
+            <path className="phone-orbit-line" pathLength="1" d="M 21 443 C 35 288 211 134 400 126 C 569 119 697 208 683 337 C 670 461 485 592 300 616 C 130 639 6 566 21 443 Z"/>
+          </svg>
+        </div>
+        <div className="float-pos lock-pos" data-parallax="10"><div className="float-bob"><SpotlightCard className="float-card lock-card" style={GLASS_MINT} spotlightColor="rgba(34,227,176,.3)" intensity={.4} spotlightSize={240} softness={.55}><LockGlyph/><p>Você decide<br/>quando parar.</p></SpotlightCard></div></div>
+        <PhoneExperience onLimitReached={() => setLimitReached(true)}/>
+        <div className="float-pos alert-pos" data-parallax="8"><div className="float-bob float-bob-alt"><SpotlightCard className={`float-card alert-card${limitReached ? ' is-in' : ''}`} style={GLASS_CORAL} spotlightColor="rgba(255,107,122,.32)" intensity={.45} spotlightSize={260} softness={.5}><span className="alert-icon"><CircleAlert size={48}/></span><span>Limite<br/>alcançado</span></SpotlightCard></div></div>
       </section>
     </main>
-    <footer className="hero-footer"><span>RECONQUISTE SEU TEMPO</span><ArrowDown className="footer-chevron" size={27} strokeWidth={3}/></footer>
+    <footer className="hero-footer"><span className="footer-caption">RECONQUISTE SEU TEMPO</span><ArrowDown className="footer-chevron" size={27} strokeWidth={3}/></footer>
     <div className="sr-only" id="como-funciona"/><div className="sr-only" id="recursos"/><div className="sr-only" id="privacidade"/><div className="sr-only" id="faq"/>
   </div>;
 }

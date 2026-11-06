@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "e2e": "playwright test",
-    "render-app-screen": "node scripts/render-app-screen/render.mjs",
+    "render-phone-poster": "node scripts/render-phone-poster/render.mjs",
     "serve": "node scripts/serve-export.mjs"
   },
   "dependencies": {
@@ -20,6 +20,7 @@
     "@react-three/fiber": "9.8.2",
     "gsap": "3.15.1",
     "lucide-react": "1.70.0",
+    "motion": "12.43.0",
     "next": "16.4.5",
     "react": "19.3.1",
     "react-dom": "19.3.1",

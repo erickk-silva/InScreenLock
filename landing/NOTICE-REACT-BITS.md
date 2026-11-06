@@ -27,3 +27,10 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+
+## Components used in this project
+
+All taken from the public React Bits registry (TypeScript + Tailwind variant), adapted in `src/components/react-bits/`:
+Aurora, SplitText, BlurText, ShinyText, StarBorder, ClickSpark, AnimatedContent, Magnet, SpotlightCard.
+No React Bits Pro asset is used. Provenance (URL, acquisition method, hash, dependencies) is kept in the local, untracked task artifacts.
