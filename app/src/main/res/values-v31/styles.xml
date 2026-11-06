@@ -1,0 +1,8 @@
+<resources>
+    <style name="Theme.InScreenLock.Launch" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowSplashScreenBackground">#12161C</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_mark</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">#101C22</item>
+        <item name="android:windowBackground">#12161C</item>
+    </style>
+</resources>

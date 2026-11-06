@@ -107,7 +107,24 @@ import com.inscreenlock.app.ui.theme.InScreenLockColors
 import com.inscreenlock.app.ui.theme.InScreenLockTheme as DesignTheme
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.border
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.viewinterop.AndroidView
+import android.widget.ImageView
 import java.time.format.TextStyle as DateTextStyle
 import java.util.Locale
 
@@ -129,7 +146,8 @@ fun InScreenLockApp(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val settings by settingsRepository.settings.collectAsState(initial = UserSettings())
+    val settingsEmission by settingsRepository.settings.collectAsState(initial = null)
+    val settings = settingsEmission ?: UserSettings()
     val usageReader = remember { UsageStatsReader(context.applicationContext) }
     val scope = rememberCoroutineScope()
     var usageTotals by remember { mutableStateOf<UsageTotals?>(null) }
@@ -183,9 +201,16 @@ fun InScreenLockApp(
 
     DesignTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = Background) {
+            AnimatedContent(
+                targetState = settingsEmission == null,
+                transitionSpec = { (fadeIn(tween(220)) + scaleIn(tween(220), initialScale = .985f)).togetherWith(fadeOut(tween(220))) },
+                label = "settings-startup",
+            ) { loading ->
             when {
-                !settings.accessibilityDisclosureAccepted -> ConsentScreen(
-                    onContinue = {
+                loading -> SplashLoadingScreen(Modifier.testTag("splash-loading"))
+                !settings.accessibilityDisclosureAccepted -> FirstLaunchFlow(
+                    consentAccepted = false,
+                    onAccept = {
                         scope.launch {
                             settingsRepository.acceptAccessibilityDisclosure()
                             openAccessibilitySettings(context)
@@ -279,7 +304,103 @@ fun InScreenLockApp(
                     }
                 }
             }
+            }
         }
+    }
+}
+
+@Composable
+internal fun FirstLaunchFlow(consentAccepted: Boolean, onAccept: () -> Unit) {
+    var showingConsent by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = showingConsent && !consentAccepted) { showingConsent = false }
+    when {
+        consentAccepted -> Unit
+        showingConsent -> ConsentScreen(onContinue = onAccept)
+        else -> OnboardingScreen(onSkip = { showingConsent = true }, onStart = { showingConsent = true })
+    }
+}
+
+@Composable
+internal fun SplashLoadingScreen(modifier: Modifier = Modifier) {
+    Box(
+        modifier.fillMaxSize().background(Brush.radialGradient(listOf(Color(0x3322E3B0), Background, Background), center = Offset.Zero, radius = 760f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            BrandBadge(Modifier.size(104.dp))
+            Spacer(Modifier.height(22.dp))
+            Text("InScreenLock", color = MainText, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            Text("Mais foco, menos rolagem.", color = Muted, style = MaterialTheme.typography.bodyLarge)
+        }
+        LinearProgressIndicator(
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 64.dp).padding(bottom = 42.dp).height(3.dp).testTag("splash-progress"),
+            color = Mint,
+            trackColor = InScreenLockColors.Surface,
+        )
+    }
+}
+
+@Composable
+private fun BrandBadge(modifier: Modifier = Modifier) {
+    Box(modifier.clip(RoundedCornerShape(28.dp)).background(Color(0xFF101C22)).border(1.dp, Color(0x5536E5BB), RoundedCornerShape(28.dp)), contentAlignment = Alignment.Center) {
+        Image(painterResource(R.drawable.ic_brand_mark), contentDescription = null, modifier = Modifier.fillMaxSize(.72f))
+    }
+}
+
+@Composable
+internal fun OnboardingScreen(onSkip: () -> Unit, onStart: () -> Unit, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    var entered by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { entered = true }
+    Box(modifier.fillMaxSize().background(Brush.radialGradient(listOf(Color(0x3322E3B0), Background, Background), center = Offset.Zero, radius = 760f))) {
+        androidx.compose.animation.AnimatedVisibility(
+            visible = entered,
+            enter = fadeIn(tween(240)) + slideInVertically(tween(240)) { it / 24 },
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 28.dp, vertical = 56.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                OnboardingIllustration(context)
+                Spacer(Modifier.height(34.dp))
+                Text("Controle seu tempo\nnas redes sociais", color = MainText, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(12.dp))
+                Text("Defina limites, acompanhe o uso e evite o excesso de rolagem.", color = Muted, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(28.dp))
+                PrimaryAction("Começar  →", onStart, Modifier.fillMaxWidth().testTag("onboarding-start"))
+            }
+        }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = entered,
+            enter = fadeIn(tween(240)) + slideInVertically(tween(240)) { it / 30 },
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 10.dp, end = 20.dp),
+        ) {
+            Text("Pular", color = Muted, modifier = Modifier.clickable(onClick = onSkip).heightIn(min = 48.dp).padding(12.dp).testTag("onboarding-skip"))
+        }
+    }
+}
+
+@Composable
+private fun OnboardingIllustration(context: Context) {
+    Box(Modifier.fillMaxWidth().height(250.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(width = 178.dp, height = 214.dp).rotate(12f).clip(RoundedCornerShape(28.dp)).background(Brush.linearGradient(listOf(Color(0xFF22303C), Color(0xFF101820), Color(0xFF17242B)))).border(1.dp, Color(0x8853CDB8), RoundedCornerShape(28.dp))) {
+            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                OnboardingAppIcon(context, "com.zhiliaoapp.musically", "TikTok")
+                Spacer(Modifier.height(16.dp))
+                OnboardingAppIcon(context, "com.instagram.android", "Instagram")
+            }
+        }
+        Box(Modifier.align(Alignment.BottomCenter).offset(x = 75.dp, y = (-2).dp).size(62.dp).clip(RoundedCornerShape(22.dp)).background(Color(0xFF102C2B)).border(1.dp, Mint, RoundedCornerShape(22.dp)), contentAlignment = Alignment.Center) {
+            Image(painterResource(R.drawable.ic_lock_symbol), contentDescription = null, modifier = Modifier.size(32.dp))
+        }
+    }
+}
+
+@Composable
+private fun OnboardingAppIcon(context: Context, packageName: String, fallback: String) {
+    val icon = remember(packageName) { runCatching { context.packageManager.getApplicationIcon(packageName) }.getOrNull() }
+    Box(Modifier.size(62.dp).clip(RoundedCornerShape(18.dp)).background(Color(0xFF202833)).border(1.dp, Color(0x553FFFFFFF), RoundedCornerShape(18.dp)), contentAlignment = Alignment.Center) {
+        if (icon != null) AndroidView(factory = { ImageView(it).apply { setImageDrawable(icon); contentDescription = fallback } }, modifier = Modifier.fillMaxSize().padding(7.dp))
+        else Text("•", color = Muted, style = MaterialTheme.typography.headlineMedium)
     }
 }
 
@@ -294,6 +415,8 @@ private fun ConsentScreen(onContinue: () -> Unit) {
             .padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.Center,
     ) {
+      SurfaceCard(Modifier.fillMaxWidth()) {
+       Column(Modifier.padding(20.dp)) {
         Text("InScreenLock", color = Mint, style = MaterialTheme.typography.labelLarge)
         Spacer(Modifier.height(16.dp))
         Text("Seu uso, no seu ritmo", color = MainText, fontSize = 30.sp, fontWeight = FontWeight.SemiBold)
@@ -340,9 +463,9 @@ private fun ConsentScreen(onContinue: () -> Unit) {
             Text("Entendo e quero continuar", color = MainText, style = MaterialTheme.typography.bodyMedium)
         }
         Spacer(Modifier.height(8.dp))
-        Button(onClick = onContinue, enabled = consentChecked, modifier = Modifier.fillMaxWidth()) {
-            Text("Continuar para acessibilidade")
-        }
+        PrimaryAction("Continuar para acessibilidade", onContinue, Modifier.fillMaxWidth().testTag("consent-continue"), enabled = consentChecked)
+       }
+      }
     }
 }
 

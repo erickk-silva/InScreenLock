@@ -36,6 +36,8 @@ import com.inscreenlock.app.ui.AnalysisScreen
 import com.inscreenlock.app.ui.CredentialRoute
 import com.inscreenlock.app.ui.DashboardScreen
 import com.inscreenlock.app.ui.InScreenLockTheme
+import com.inscreenlock.app.ui.OnboardingScreen
+import com.inscreenlock.app.ui.SplashLoadingScreen
 import com.inscreenlock.app.ui.LimitsRoute
 import com.inscreenlock.app.ui.MoreScreen
 import com.inscreenlock.app.ui.components.AppBarItem
@@ -56,6 +58,19 @@ class VisualStatesCaptureTest {
     @get:Rule val rules = RuleChain.outerRule(ClearSettingsRule()).around(activityRule)
 
     @Test fun capturesCompleteRedesignScreensUsingClearlySyntheticFixtureData() {
+        activityRule.activity.runOnUiThread {
+            activityRule.activity.setContent { InScreenLockTheme { SplashLoadingScreen(Modifier.fillMaxSize()) } }
+        }
+        activityRule.waitForIdle()
+        activityRule.onNodeWithText("Mais foco, menos rolagem.", substring = false).assertIsDisplayed()
+        capture("splash-loading")
+        activityRule.activity.runOnUiThread {
+            activityRule.activity.setContent { InScreenLockTheme { OnboardingScreen(onSkip = {}, onStart = {}) } }
+        }
+        activityRule.waitForIdle()
+        activityRule.onNodeWithTag("onboarding-start").assertIsDisplayed()
+        capture("onboarding")
+
         captureDashboard("home-normal-synthetic", BudgetLevel.NORMAL, UsageTotals(12 * MINUTE_MS))
         activityRule.onNodeWithText("Dentro do combinado", substring = false).assertIsDisplayed()
         captureDashboard("home-attention-synthetic", BudgetLevel.ATTENTION, UsageTotals(25 * MINUTE_MS + 30_000))
