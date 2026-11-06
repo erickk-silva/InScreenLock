@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.padding
@@ -25,7 +26,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -101,6 +102,7 @@ import com.inscreenlock.app.ui.components.ProgressLevel
 import com.inscreenlock.app.ui.components.ProgressRing
 import com.inscreenlock.app.ui.components.ScreenHeader
 import com.inscreenlock.app.ui.components.StatusBanner
+import com.inscreenlock.app.ui.components.SurfaceCard
 import com.inscreenlock.app.ui.theme.InScreenLockColors
 import com.inscreenlock.app.ui.theme.InScreenLockTheme as DesignTheme
 import androidx.compose.foundation.Canvas
@@ -110,7 +112,6 @@ import java.time.format.TextStyle as DateTextStyle
 import java.util.Locale
 
 private val Background = InScreenLockColors.Background
-private val SurfaceColor = InScreenLockColors.Surface
 private val Border = InScreenLockColors.Outline
 private val Mint = InScreenLockColors.Primary
 private val MainText = InScreenLockColors.TextPrimary
@@ -372,8 +373,6 @@ internal fun DashboardScreen(
             else -> action()
         }
     }
-    val protectionReady = usageAvailable && accessibilityEnabled && settings.monitoringEnabled &&
-        (settings.reactionMode == ReactionMode.WARNING || credentialAvailable)
     Column(
         modifier = modifier.fillMaxSize()
             .wrapContentWidth(Alignment.CenterHorizontally)
@@ -381,7 +380,7 @@ internal fun DashboardScreen(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp),
     ) {
-        ScreenHeader("Hoje", subtitle = "Uso de hoje")
+        ScreenHeader("Hoje", subtitle = localTodayLabel())
         Spacer(Modifier.height(14.dp))
         DashboardBudgetCard(settings, totals, budgetLevel, usageAccessGranted = usageAvailable)
         Spacer(Modifier.height(10.dp))
@@ -407,73 +406,39 @@ internal fun DashboardScreen(
             onAction = if (budgetLevel == BudgetLevel.UNAVAILABLE && !usageAvailable) onOpenSettings else null,
         )
         Spacer(Modifier.height(14.dp))
-        AppBreakdownCard("Instagram", totals?.instagramMs)
-        Spacer(Modifier.height(10.dp))
-        AppBreakdownCard("TikTok", totals?.tiktokMs)
-        Spacer(Modifier.height(14.dp))
-        AppUsageCard(appUsage)
-        Spacer(Modifier.height(16.dp))
-        StatusBanner(
-            message = when {
-                !usageAvailable -> "Conceda Acesso de uso nas configurações do Android para consultar o tempo."
-                !accessibilityEnabled -> "Ative Acessibilidade para permitir o monitoramento."
-                !settings.monitoringEnabled -> "O monitoramento está desligado."
-                settings.reactionMode == ReactionMode.LOCK && !credentialAvailable -> "Defina um PIN ou configure uma credencial segura do aparelho."
-                else -> "Acessibilidade: ativa · Acesso de uso: ativo"
-            },
-            title = when {
-                !usageAvailable -> "Acesso de uso necessário"
-                !accessibilityEnabled -> "Acessibilidade não ativada"
-                !settings.monitoringEnabled -> "Monitoramento desligado"
-                settings.reactionMode == ReactionMode.LOCK && !credentialAvailable -> "Sem credencial"
-                else -> "Monitoramento ativo"
-            },
-            level = if (protectionReady) BannerLevel.INFO else BannerLevel.WARNING,
-        )
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                Text(
-                    when {
-                        protectionReady -> "Monitoramento ativo"
-                        !settings.monitoringEnabled -> "Monitoramento desativado"
-                        !usageAvailable -> "Acesso de uso necessário"
-                        !accessibilityEnabled -> "Contador sobre os apps indisponível"
-                        settings.reactionMode == ReactionMode.LOCK && !credentialAvailable -> "Bloqueio indisponível: defina um PIN"
-                        else -> "Monitoramento desativado"
-                    },
-                    color = MainText,
-                    fontWeight = FontWeight.Medium,
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    if (accessibilityEnabled) "Acessibilidade: ativa" else "Acessibilidade: não ativada",
-                    color = Muted,
-                )
-                Text(
-                    if (usageAvailable) "Acesso de uso: ativo" else "Acesso de uso: não concedido",
-                    color = Muted,
-                )
-                if (settings.reactionMode == ReactionMode.LOCK && !credentialAvailable) {
-                    Text("Bloqueio com senha indisponível: defina um PIN ou configure a credencial do aparelho.", color = Attention)
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        AppUsageCard(appUsage, totals?.totalMs)
+        Spacer(Modifier.height(12.dp))
+        val monitoringChecked = settings.monitoringEnabled && usageAvailable && accessibilityEnabled
+        SurfaceCard(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                    modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 56.dp).padding(horizontal = 16.dp).toggleable(
+                        value = monitoringChecked,
+                        enabled = usageAvailable && accessibilityEnabled,
+                        role = Role.Switch,
+                        onValueChange = requestMonitoringChange,
+                    ).testTag("dashboard-monitoring-switch"),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text("Monitorar apps", color = MainText)
+                    Column(Modifier.weight(1f)) {
+                        Text("Monitoramento", color = MainText, style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            when {
+                                !usageAvailable -> "Acesso de uso não concedido"
+                                !accessibilityEnabled -> "Acessibilidade não ativada"
+                                monitoringChecked -> "Ativo"
+                                else -> "Desligado"
+                            },
+                            color = Muted,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                     Switch(
-                        checked = settings.monitoringEnabled && usageAvailable && accessibilityEnabled,
-                        onCheckedChange = requestMonitoringChange,
+                        checked = monitoringChecked,
+                        onCheckedChange = null,
                         enabled = usageAvailable && accessibilityEnabled,
-                        modifier = Modifier.testTag("dashboard-monitoring-switch"),
                     )
                 }
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-        OutlinedButton(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth()) {
-            Text("Configurações e privacidade")
         }
         Spacer(Modifier.height(24.dp))
     }
@@ -493,7 +458,7 @@ internal fun DashboardScreen(
 }
 
 @Composable
-internal fun AppUsageCard(apps: List<AppUsageEntry>?) {
+internal fun AppUsageCard(apps: List<AppUsageEntry>?, combinedTotalMs: Long? = null) {
     var expanded by remember { mutableStateOf(false) }
     val sortedApps = remember(apps) {
         apps?.let { entries ->
@@ -505,16 +470,23 @@ internal fun AppUsageCard(apps: List<AppUsageEntry>?) {
             ranked.mapNotNull { (packageName) -> entriesByPackage[packageName] }
         }
     }
-    Card(modifier = Modifier.fillMaxWidth().testTag("app-usage-card")) {
+    SurfaceCard(modifier = Modifier.fillMaxWidth().testTag("app-usage-card")) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Text("Uso de hoje por app", color = MainText, style = MaterialTheme.typography.titleMedium)
+            Text("Uso por app", color = MainText, style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(6.dp))
             when {
                 apps == null -> Text("Indisponível", color = Muted, style = MaterialTheme.typography.bodyMedium)
-                sortedApps.isNullOrEmpty() -> Text("Nenhum uso registrado hoje", color = Muted)
+                sortedApps.isNullOrEmpty() -> Text(
+                    if ((combinedTotalMs ?: 0L) > 0L) "Detalhamento por app indisponível; total combinado preservado acima."
+                    else "Nenhum uso registrado hoje",
+                    color = Muted,
+                )
                 else -> {
                     val visibleApps = if (expanded) sortedApps else sortedApps.take(APP_USAGE_PREVIEW_COUNT)
-                    visibleApps.forEach { entry -> AppUsageRow(entry) }
+                    visibleApps.forEachIndexed { index, entry ->
+                        AppUsageRow(entry)
+                        if (index != visibleApps.lastIndex) HorizontalDivider(color = Border.copy(alpha = 0.35f), thickness = 0.5.dp)
+                    }
                     if (sortedApps.size > APP_USAGE_PREVIEW_COUNT) {
                         androidx.compose.material3.TextButton(
                             onClick = { expanded = !expanded },
@@ -545,8 +517,8 @@ private fun AppUsageRow(entry: AppUsageEntry) {
                 modifier = Modifier.size(40.dp),
             )
         } else {
-            Surface(modifier = Modifier.size(40.dp), color = SurfaceColor, shape = MaterialTheme.shapes.small) {
-                Text("•", color = Mint, style = MaterialTheme.typography.titleLarge)
+            Surface(modifier = Modifier.size(40.dp), color = InScreenLockColors.PrimaryDark, shape = MaterialTheme.shapes.small) {
+                Box(contentAlignment = Alignment.Center) { Text(entry.label.firstOrNull()?.uppercase() ?: "?", color = InScreenLockColors.Background, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold) }
             }
         }
         Text(entry.label, color = MainText, modifier = Modifier.weight(1f), maxLines = 2, style = MaterialTheme.typography.bodyMedium)
@@ -556,10 +528,10 @@ private fun AppUsageRow(entry: AppUsageEntry) {
 
 @Composable
 internal fun DashboardBudgetCard(settings: UserSettings, totals: UsageTotals?, budgetLevel: BudgetLevel, usageAccessGranted: Boolean = true) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    SurfaceCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Tempo combinado · Instagram + TikTok", color = Muted, style = MaterialTheme.typography.bodyMedium)
-            Spacer(Modifier.height(16.dp))
+            Text("Tempo combinado · Instagram + TikTok", color = Muted, style = MaterialTheme.typography.labelMedium)
+            Spacer(Modifier.height(10.dp))
             ProgressRing(
                 progress = if (budgetLevel == BudgetLevel.UNAVAILABLE || totals == null) 0f else totals.totalMs.toFloat() / (settings.dailyLimitMinutes * MINUTE_MS),
                 valueLabel = totals?.let { formatDuration(it.totalMs) } ?: "—",
@@ -571,23 +543,20 @@ internal fun DashboardBudgetCard(settings: UserSettings, totals: UsageTotals?, b
                 contentDescription = "${totals?.let { formatDuration(it.totalMs) } ?: "Indisponível"} usados de ${settings.dailyLimitMinutes} minutos",
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(totals?.let { formatDuration(it.totalMs) } ?: "—", style = MaterialTheme.typography.titleLarge, color = MainText, textAlign = TextAlign.Center)
-                    Text("de ${settings.dailyLimitMinutes} min", style = MaterialTheme.typography.bodySmall, color = Muted)
+                    Text(totals?.let { formatDuration(it.totalMs) } ?: "—", style = MaterialTheme.typography.displaySmall, color = MainText, textAlign = TextAlign.Center)
+                    Text("de ${settings.dailyLimitMinutes} min", style = MaterialTheme.typography.titleSmall, color = Muted)
                 }
-            }
-            Spacer(Modifier.height(12.dp))
-            Text("Meta diária", color = Muted)
-            if (totals != null && budgetLevel != BudgetLevel.UNAVAILABLE) {
-                val remaining = settings.dailyLimitMinutes * MINUTE_MS - totals.totalMs
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    if (remaining >= 0) "Restam ${formatDuration(remaining)}"
-                    else "${formatDuration(-remaining)} acima da meta",
-                    color = Muted,
-                )
             }
         }
     }
+}
+
+private fun localTodayLabel(): String {
+    val date = java.time.LocalDate.now()
+    val locale = Locale.forLanguageTag("pt-BR")
+    val weekday = date.dayOfWeek.getDisplayName(DateTextStyle.SHORT, locale).replace(".", "").replaceFirstChar { it.uppercase(locale) }
+    val month = date.month.getDisplayName(DateTextStyle.SHORT, locale).replace(".", "")
+    return "$weekday, ${date.dayOfMonth} de $month."
 }
 
 private fun navItem(label: String, route: String, selected: MainRoute, iconRes: Int, onClick: () -> Unit) = AppBarItem(
@@ -650,7 +619,7 @@ internal fun AnalysisScreen(
 
 @Composable
 private fun WeeklyBars(week: WeekUsage) {
-    Card(Modifier.fillMaxWidth(), shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp)) {
+    SurfaceCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Text("Tempo por dia", style = MaterialTheme.typography.titleMedium)
             Text("Últimos 7 dias locais · dias parciais podem variar", style = MaterialTheme.typography.bodySmall, color = Muted)
@@ -686,7 +655,7 @@ private fun WeeklyAppDistribution(week: WeekUsage) {
     val totals = week.days.filter { it.available }.flatMap { it.byPackage.entries }
         .groupBy({ it.key }, { it.value }).mapValues { (_, durations) -> durations.sum() }
         .toList().sortedByDescending { it.second }
-    Card(Modifier.fillMaxWidth(), shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp)) {
+    SurfaceCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Text("Distribuição por app na semana", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
@@ -725,7 +694,7 @@ internal fun LimitsRoute(
     val limit = limitText.toIntOrNull()?.takeIf { it > 0 }
     Column(modifier.fillMaxSize().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = 640.dp).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
         ScreenHeader("Limites", subtitle = "Instagram + TikTok")
-        Card(Modifier.fillMaxWidth()) {
+        SurfaceCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Limite combinado diário", style = MaterialTheme.typography.titleMedium)
                 Text("Conta o tempo com Instagram ou TikTok em primeiro plano e a tela ativa.", color = Muted)
@@ -781,7 +750,7 @@ internal fun MoreScreen(
     val credentialAvailable = deviceSecure || settings.hasPin
     Column(modifier.fillMaxSize().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = 640.dp).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
         ScreenHeader("Mais", subtitle = "Permissões, credencial e privacidade")
-        Card(Modifier.fillMaxWidth()) {
+        SurfaceCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
                 Text("Permissões do Android", style = MaterialTheme.typography.titleMedium)
                 StyledPermissionRow("Acesso de uso", usageAvailable, onOpenUsageSettings, activeLabel = "Ativo", inactiveLabel = "Não concedido", actionLabel = "Abrir")
@@ -792,7 +761,7 @@ internal fun MoreScreen(
             }
         }
         Spacer(Modifier.height(12.dp))
-        Card(Modifier.fillMaxWidth()) {
+        SurfaceCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
                 Text("Monitoramento", style = MaterialTheme.typography.titleMedium)
                 Text(if (settings.monitoringEnabled && usageAvailable && accessibilityEnabled) "Ativo" else "Desativado ou sem permissões", color = Muted)
@@ -814,7 +783,7 @@ internal fun MoreScreen(
 
 @Composable
 private fun MoreActionCard(title: String, description: String, onClick: () -> Unit) {
-    Card(Modifier.fillMaxWidth().padding(bottom = 10.dp).clickable(onClick = onClick)) {
+    SurfaceCard(Modifier.fillMaxWidth().padding(bottom = 10.dp).clickable(onClick = onClick)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 68.dp).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) { Text(title, color = MainText, style = MaterialTheme.typography.titleSmall); Text(description, color = Muted, style = MaterialTheme.typography.bodySmall) }
             Text("›", color = Mint, style = MaterialTheme.typography.headlineMedium)
@@ -833,7 +802,7 @@ internal fun CredentialRoute(modifier: Modifier = Modifier, settings: UserSettin
         ScreenHeader("Credencial de desbloqueio", subtitle = "PIN local de 4 a 8 dígitos", trailingContent = {
             OutlinedButton(onClick = onBack, modifier = Modifier.heightIn(min = 48.dp)) { Text("← Voltar") }
         })
-        Card(Modifier.fillMaxWidth()) {
+        SurfaceCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(if (settings.hasPin) "Altere o PIN" else if (deviceSecure) "A credencial segura do aparelho também pode desbloquear." else "Defina um PIN para habilitar bloqueio com senha.", color = Muted)
                 OutlinedTextField(first, { if (it.length <= 8 && it.all(Char::isDigit)) first = it }, label = { Text(if (settings.hasPin) "Novo PIN (4–8 dígitos)" else "Definir PIN (4–8 dígitos)") }, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), singleLine = true, modifier = Modifier.fillMaxWidth().testTag("pin-first"))
@@ -871,7 +840,7 @@ private fun PrivacyRoute(modifier: Modifier, settings: UserSettings, deviceSecur
         ScreenHeader("Privacidade e dados", trailingContent = {
             OutlinedButton(onClick = onBack, modifier = Modifier.heightIn(min = 48.dp)) { Text("← Voltar") }
         })
-        Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { Text(privacyText, color = Muted); PrimaryAction("Apagar preferências locais", { showDialog = true }, Modifier.fillMaxWidth(), secondary = true); PrimaryAction("Voltar", onBack, Modifier.fillMaxWidth(), secondary = true) } }
+        SurfaceCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { Text(privacyText, color = Muted); PrimaryAction("Apagar preferências locais", { showDialog = true }, Modifier.fillMaxWidth(), secondary = true); PrimaryAction("Voltar", onBack, Modifier.fillMaxWidth(), secondary = true) } }
         Spacer(Modifier.height(24.dp))
     }
     if (showDialog) AlertDialog(onDismissRequest = { showDialog = false }, title = { Text("Apagar preferências?") }, text = { Text("O consentimento e as configurações locais serão removidos.") }, confirmButton = { Button(onClick = { showDialog = false; val action = { onClear() }; if (ProtectedChange.requiresAuthentication(ProtectedChange.ClearData, deviceSecure || settings.hasPin)) onAuthenticate(action) else action() }) { Text("Apagar") } }, dismissButton = { OutlinedButton(onClick = { showDialog = false }) { Text("Cancelar") } })
@@ -895,7 +864,7 @@ private fun ConfirmationDialog(message: String, onDismiss: () -> Unit, onConfirm
 
 @Composable
 private fun AppBreakdownCard(name: String, usedMs: Long?) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    SurfaceCard(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,

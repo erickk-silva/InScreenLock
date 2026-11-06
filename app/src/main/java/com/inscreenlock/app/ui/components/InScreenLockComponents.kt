@@ -7,6 +7,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
@@ -27,6 +29,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -48,6 +51,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.res.painterResource
+import com.inscreenlock.app.R
+import com.inscreenlock.app.ui.theme.InScreenLockColors
 
 data class AppBarItem(val label: String, val contentDescription: String, val selected: Boolean, val onClick: () -> Unit, val icon: @Composable () -> Unit)
 
@@ -61,7 +68,7 @@ fun AppScaffold(
         modifier = modifier,
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            if (bottomBarItems.isNotEmpty()) NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+            if (bottomBarItems.isNotEmpty()) NavigationBar(containerColor = InScreenLockColors.Surface) {
                 bottomBarItems.forEach { item ->
                     NavigationBarItem(
                         selected = item.selected,
@@ -69,6 +76,13 @@ fun AppScaffold(
                         icon = item.icon,
                         label = { Text(item.label) },
                         modifier = Modifier.semantics { contentDescription = item.contentDescription },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
                     )
                 }
             }
@@ -79,18 +93,29 @@ fun AppScaffold(
 
 @Composable
 fun ScreenHeader(title: String, modifier: Modifier = Modifier, subtitle: String? = null, trailingContent: (@Composable () -> Unit)? = null) {
-    Row(modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onBackground)
-            if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Column(modifier.fillMaxWidth().padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Image(painterResource(R.drawable.ic_brand_mark), null, Modifier.size(28.dp))
+            Text("InScreenLock", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
         }
-        trailingContent?.invoke()
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.onBackground)
+                if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            trailingContent?.invoke()
+        }
     }
 }
 
 @Composable
+fun SurfaceCard(modifier: Modifier = Modifier, shape: RoundedCornerShape = RoundedCornerShape(20.dp), content: @Composable ColumnScope.() -> Unit) {
+    Card(modifier = modifier, shape = shape, colors = CardDefaults.cardColors(containerColor = InScreenLockColors.Surface), elevation = CardDefaults.cardElevation(defaultElevation = 0.dp), content = content)
+}
+
+@Composable
 fun MetricCard(label: String, value: String, modifier: Modifier = Modifier, detail: String? = null, accent: Color = MaterialTheme.colorScheme.primary) {
-    Card(modifier = modifier, shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+    SurfaceCard(modifier = modifier) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(value, style = MaterialTheme.typography.headlineSmall, color = accent)
@@ -105,17 +130,20 @@ enum class ProgressLevel { NORMAL, ATTENTION, EXCEEDED }
 fun ProgressRing(progress: Float, valueLabel: String, modifier: Modifier = Modifier, level: ProgressLevel = ProgressLevel.NORMAL, contentDescription: String = valueLabel, content: (@Composable () -> Unit)? = null) {
     val ringColor = when (level) {
         ProgressLevel.NORMAL -> MaterialTheme.colorScheme.primary
-        ProgressLevel.ATTENTION -> MaterialTheme.colorScheme.tertiary
-        ProgressLevel.EXCEEDED -> MaterialTheme.colorScheme.tertiary
+        ProgressLevel.ATTENTION -> Color(0xFFFFC857)
+        ProgressLevel.EXCEEDED -> InScreenLockColors.Alert
     }
-    val trackColor = MaterialTheme.colorScheme.surfaceVariant
-    Box(modifier.size(144.dp).semantics(mergeDescendants = true) { this.contentDescription = contentDescription }, contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize().clearAndSetSemantics {}) {
-            val stroke = 12.dp.toPx()
-            drawArc(trackColor, -90f, 360f, false, style = Stroke(stroke, cap = StrokeCap.Round))
-            drawArc(ringColor, -90f, 360f * progress.coerceIn(0f, 1f), false, style = Stroke(stroke, cap = StrokeCap.Round))
+    val trackColor = InScreenLockColors.Background
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        val diameter = minOf(maxWidth * 0.60f, 240.dp)
+        Box(Modifier.size(diameter).semantics(mergeDescendants = true) { this.contentDescription = contentDescription }, contentAlignment = Alignment.Center) {
+            Canvas(Modifier.fillMaxSize().clearAndSetSemantics {}) {
+                val stroke = 14.dp.toPx()
+                drawArc(trackColor, -90f, 360f, false, style = Stroke(stroke, cap = StrokeCap.Round))
+                drawArc(ringColor, -90f, 360f * progress.coerceIn(0f, 1f), false, style = Stroke(stroke, cap = StrokeCap.Round))
+            }
+            if (content != null) content() else Text(valueLabel, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
         }
-        if (content != null) content() else Text(valueLabel, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 
@@ -170,12 +198,14 @@ fun StatusBanner(message: String, level: BannerLevel, modifier: Modifier = Modif
     }
     Surface(modifier = modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = color.copy(alpha = 0.12f), contentColor = MaterialTheme.colorScheme.onSurface) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(Modifier.size(10.dp).clip(CircleShape).background(color))
+            Image(painterResource(if (level == BannerLevel.INFO) R.drawable.ic_status_info else R.drawable.ic_status_alert), null, Modifier.size(24.dp), colorFilter = if (level == BannerLevel.INFO) null else ColorFilter.tint(color))
             Column(Modifier.weight(1f)) {
                 if (title != null) Text(title, style = MaterialTheme.typography.titleSmall, color = color)
                 Text(message, style = MaterialTheme.typography.bodyMedium)
             }
-            if (actionLabel != null && onAction != null) Text(actionLabel, Modifier.clickable(role = Role.Button, onClick = onAction).padding(8.dp), color = color, style = MaterialTheme.typography.labelLarge)
+            if (actionLabel != null && onAction != null) Box(Modifier.defaultMinSize(minHeight = 48.dp).clickable(role = Role.Button, onClick = onAction).padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
+                Text(actionLabel, color = color, style = MaterialTheme.typography.labelLarge)
+            }
         }
     }
 }
@@ -190,7 +220,7 @@ fun LimitSelector(optionsMinutes: List<Int>, selectedMinutes: Int, onSelect: (In
                 Surface(
                     modifier = Modifier.defaultMinSize(minHeight = 48.dp).clickable(role = Role.RadioButton) { onSelect(minutes) }.semantics { contentDescription = "$minutes minutos${if (selected) ", selecionado" else ""}" },
                     shape = RoundedCornerShape(24.dp),
-                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                    color = if (selected) MaterialTheme.colorScheme.primary else InScreenLockColors.Surface,
                     contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
                 ) { Box(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), contentAlignment = Alignment.Center) { Text("$minutes min", style = MaterialTheme.typography.labelLarge) } }
             }
@@ -214,7 +244,7 @@ fun PinInput(digitCount: Int, onDigit: (Int) -> Unit, onBackspace: () -> Unit, m
     Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.semantics { contentDescription = "${enteredCount.coerceIn(0, digitCount)} de $digitCount dígitos digitados" }.testTag("pin-display")) {
             repeat(digitCount.coerceAtLeast(0)) { index ->
-                Box(Modifier.size(width = 42.dp, height = 48.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clearAndSetSemantics { }, contentAlignment = Alignment.Center) {
+                Box(Modifier.size(width = 42.dp, height = 48.dp).clip(RoundedCornerShape(10.dp)).background(InScreenLockColors.Surface).clearAndSetSemantics { }, contentAlignment = Alignment.Center) {
                     if (index < enteredCount) Box(Modifier.size(10.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
                 }
             }

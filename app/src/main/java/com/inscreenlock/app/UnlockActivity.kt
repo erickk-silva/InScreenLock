@@ -31,6 +31,8 @@ import com.inscreenlock.app.data.PinAttempt
 import com.inscreenlock.app.data.SettingsRepository
 import com.inscreenlock.app.ui.components.PinInput
 import com.inscreenlock.app.ui.components.PrimaryAction
+import com.inscreenlock.app.ui.components.ScreenHeader
+import com.inscreenlock.app.ui.components.SurfaceCard
 import com.inscreenlock.app.ui.theme.InScreenLockTheme
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -120,38 +122,35 @@ internal fun UnlockScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Spacer(Modifier.height(20.dp))
-        Text("InScreenLock", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(20.dp))
-        Text(if (confirmingChange) "Confirme para continuar" else "Desbloquear apps", color = MaterialTheme.colorScheme.onBackground, fontSize = 25.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(8.dp))
-        Text(
-            if (confirmingChange) "Confirme para autorizar este ajuste."
-            else "O acesso será liberado por até 15 minutos.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        ScreenHeader(
+            if (confirmingChange) "Confirme para continuar" else "Desbloquear apps",
+            subtitle = if (confirmingChange) "Confirme para autorizar este ajuste." else "O acesso será liberado por até 15 minutos.",
         )
-        if (canUseDeviceCredential) {
-            Spacer(Modifier.height(16.dp))
-            Button(onClick = onDeviceCredential, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
-                Text("Usar senha, padrão ou biometria do dispositivo")
+        SurfaceCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                if (canUseDeviceCredential) {
+                    Spacer(Modifier.height(8.dp))
+                    Button(onClick = onDeviceCredential, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+                        Text("Usar senha, padrão ou biometria do dispositivo")
+                    }
+                }
+                if (hasPin) {
+                    Spacer(Modifier.height(12.dp))
+                    Text("PIN do InScreenLock", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    PinInput(
+                        digitCount = 8,
+                        onDigit = { digit -> pin = onDigit(pin, digit.toString()); error = "" },
+                        onBackspace = { pin = onDelete(pin); error = "" },
+                        enteredCount = pin.length,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    PrimaryAction("Desbloquear", { onPinSubmit(pin) { error = it } }, Modifier.fillMaxWidth().testTag("pin-submit"), enabled = pin.length in 4..8)
+                    if (error.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("pin-error"))
+                }
+                Spacer(Modifier.height(12.dp))
+                PrimaryAction(if (confirmingChange) "Cancelar" else "Voltar", onCancel, Modifier.fillMaxWidth(), secondary = true)
             }
         }
-        if (hasPin) {
-            Spacer(Modifier.height(20.dp))
-            Text("PIN do InScreenLock", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(8.dp))
-            PinInput(
-                digitCount = 8,
-                onDigit = { digit -> pin = onDigit(pin, digit.toString()); error = "" },
-                onBackspace = { pin = onDelete(pin); error = "" },
-                enteredCount = pin.length,
-            )
-            Spacer(Modifier.height(8.dp))
-            PrimaryAction("Desbloquear", { onPinSubmit(pin) { error = it } }, Modifier.fillMaxWidth().testTag("pin-submit"), enabled = pin.length in 4..8)
-            if (error.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("pin-error"))
-        }
-        Spacer(Modifier.height(12.dp))
-        PrimaryAction(if (confirmingChange) "Cancelar" else "Voltar", onCancel, Modifier.fillMaxWidth(), secondary = true)
-        Spacer(Modifier.height(20.dp))
     }
 }
