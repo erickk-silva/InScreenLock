@@ -2,6 +2,7 @@ package com.inscreenlock.app
 
 import androidx.activity.compose.setContent
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -39,7 +40,7 @@ class RedesignNavigationComposeTest {
             activityRule.activity.setContent { InScreenLockApp(repository) }
         }
         activityRule.waitForIdle()
-        activityRule.onNodeWithText("Uso de hoje").assertIsDisplayed()
+        activityRule.onNodeWithTag("screen-title").assertTextEquals("Hoje")
 
         activityRule.onAllNodesWithText("Análises").get(0).performClick()
         activityRule.waitForIdle()
@@ -57,7 +58,7 @@ class RedesignNavigationComposeTest {
 
         activityRule.activity.onBackPressedDispatcher.onBackPressed()
         activityRule.waitForIdle()
-        activityRule.onNodeWithText("Uso de hoje").assertIsDisplayed()
+        activityRule.onNodeWithTag("screen-title").assertTextEquals("Hoje")
     }
 
     @Test fun limitIncreaseStillWaitsForAuthenticationBeforeSaving() {

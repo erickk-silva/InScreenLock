@@ -63,7 +63,8 @@ class VisualStatesCaptureTest {
         captureDashboard("home-exceeded-synthetic", BudgetLevel.EXCEEDED, UsageTotals(39 * MINUTE_MS))
         activityRule.onNodeWithText("Limite diário alcançado", substring = false).assertIsDisplayed()
         captureDashboard("home-unavailable-synthetic", BudgetLevel.UNAVAILABLE, null, available = false)
-        activityRule.onNodeWithText("Indisponível", substring = false).assertIsDisplayed()
+        activityRule.onAllNodesWithText("Indisponível", substring = false).assertCountEquals(2)
+        activityRule.onAllNodesWithText("Indisponível", substring = false)[0].assertIsDisplayed()
 
         val now = LocalDate.now()
         val withData = WeekUsage((6 downTo 0).map { daysAgo ->
