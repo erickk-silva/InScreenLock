@@ -18,6 +18,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
+import com.inscreenlock.app.MainActivity
 import com.inscreenlock.app.UnlockActivity
 import com.inscreenlock.app.R
 import com.inscreenlock.app.data.SettingsRepository
@@ -126,10 +127,15 @@ class AccessibilityMonitorService : AccessibilityService() {
             return
         }
         val packageName = event?.packageName?.toString()
+        val ownPackageName = packageName?.takeIf { it == this.packageName }
+        val eventClassName = if (ownPackageName != null) event?.className?.toString() else null
         val previousTarget = currentTargetPackage
         val resolution = sessionController?.onWindowEvent(
             eventPackage = packageName,
             transientPackages = transientPackages(),
+            ownPackageName = ownPackageName,
+            eventClassName = eventClassName,
+            ownActivityClassNames = if (ownPackageName != null) OWN_ACTIVITY_CLASS_NAMES else emptySet(),
         ) ?: return
         val targetPackage = resolution.targetPackage
         if (resolution.transientWindow) {
@@ -368,6 +374,7 @@ class AccessibilityMonitorService : AccessibilityService() {
         const val REFRESH_INTERVAL_MS = 10_000L
         const val TRANSIENT_RECONFIRM_DELAY_MS = 1_500L
         const val MINUTE_MS = 60_000L
+        val OWN_ACTIVITY_CLASS_NAMES = setOf(MainActivity::class.java.name, UnlockActivity::class.java.name)
         const val SYSTEM_UI_PACKAGE = "com.android.systemui"
     }
 }

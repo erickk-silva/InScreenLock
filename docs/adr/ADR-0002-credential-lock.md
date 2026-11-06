@@ -22,7 +22,9 @@ The lock is not tamper-proof. A user can disable Accessibility, force-stop or un
 
 ## Escopo de eventos de Acessibilidade
 
-The service receives `TYPE_WINDOW_STATE_CHANGED` events from any package and reads only `packageName`; it discards the event and does not retain its contents. Enabled IME packages and `com.android.systemui` are treated as transient windows: the overlay is hidden and the service retains the active target for a short UsageStats foreground reconfirmation, followed by its normal 10-second refresh. A recent UsageStats foreground transition to another non-transient package ends the target session immediately. Missing UsageStats foreground data preserves the existing event-driven behavior. The service does not inspect window content, bounds or visibility.
+The service receives `TYPE_WINDOW_STATE_CHANGED` events from any package and reads only `packageName` for other packages; it discards the event and does not retain its contents. Enabled IME packages and `com.android.systemui` are treated as transient windows: the overlay is hidden and the service retains the active target for a short UsageStats foreground reconfirmation, followed by its normal 10-second refresh. A recent UsageStats foreground transition to another non-transient package ends the target session immediately. Missing UsageStats foreground data preserves the existing event-driven behavior. The service does not inspect window content, bounds or visibility.
+
+To distinguish its own overlay windows from Activity exits, the service reads `className` only when `packageName` is its own: events from non-Activity Views are ignored, while events from declared app Activities continue to end the target session.
 
 Owner decision (2026-10-25): the current notification-shade/keyboard behavior, including hiding and reconfirming after 1.5 seconds, is retained provisionally. The final decision depends on measurement on a physical device. If Android emits a target-app window event when the shade or keyboard closes, the overlay will reappear only on that event.
 

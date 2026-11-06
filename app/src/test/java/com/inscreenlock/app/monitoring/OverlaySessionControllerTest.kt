@@ -30,13 +30,37 @@ class OverlaySessionControllerTest {
         assertTrue(controller.loopRunning)
     }
 
-    @Test fun ownAppWindowRemovesOverlayAndStopsRefreshLoop() {
+    @Test fun ownActivityWindowRemovesOverlayAndStopsRefreshLoop() {
         controller.onWindowEvent(instagram, emptySet())
         controller.presentOverlay { true }
-        controller.onWindowEvent("com.inscreenlock.app", emptySet())
+        controller.onWindowEvent(
+            eventPackage = "com.inscreenlock.app",
+            transientPackages = emptySet(),
+            ownPackageName = "com.inscreenlock.app",
+            eventClassName = "com.inscreenlock.app.MainActivity",
+            ownActivityClassNames = setOf("com.inscreenlock.app.MainActivity", "com.inscreenlock.app.UnlockActivity"),
+        )
         assertFalse(host.visible)
         assertFalse(controller.loopRunning)
         assertNull(controller.targetPackage)
+    }
+
+    @Test fun ownViewWindowEventKeepsOverlayAndTargetSession() {
+        controller.onWindowEvent(instagram, emptySet())
+        controller.presentOverlay { true }
+
+        val ignoredResolution = controller.onWindowEvent(
+            eventPackage = "com.inscreenlock.app",
+            transientPackages = emptySet(),
+            ownPackageName = "com.inscreenlock.app",
+            eventClassName = "android.widget.TextView",
+            ownActivityClassNames = setOf("com.inscreenlock.app.MainActivity", "com.inscreenlock.app.UnlockActivity"),
+        )
+
+        assertNull(ignoredResolution)
+        assertEquals(instagram, controller.targetPackage)
+        assertTrue(controller.loopRunning)
+        assertTrue(host.visible)
     }
 
     @Test fun usageStatsReconfirmationWithOtherAppEndsTargetSession() {

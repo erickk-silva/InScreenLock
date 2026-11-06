@@ -38,7 +38,16 @@ class OverlaySessionController(private val host: OverlaySessionHost) {
         return true
     }
 
-    fun onWindowEvent(eventPackage: String?, transientPackages: Set<String>): WindowForegroundResolution {
+    fun onWindowEvent(
+        eventPackage: String?,
+        transientPackages: Set<String>,
+        ownPackageName: String? = null,
+        eventClassName: String? = null,
+        ownActivityClassNames: Set<String> = emptySet(),
+    ): WindowForegroundResolution? {
+        if (eventPackage == ownPackageName && eventPackage != null && eventClassName !in ownActivityClassNames) {
+            return null
+        }
         val resolution = ForegroundResolver.resolveWindowEvent(eventPackage, transientPackages, targetPackage)
         targetPackage = resolution.targetPackage
         transientWindow = resolution.transientWindow
