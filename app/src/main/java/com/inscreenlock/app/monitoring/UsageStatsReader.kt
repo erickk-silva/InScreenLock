@@ -16,6 +16,8 @@ import com.inscreenlock.app.domain.UsageSignal
 import com.inscreenlock.app.domain.UsageTotals
 import com.inscreenlock.app.domain.UsageQuerySnapshot
 import com.inscreenlock.app.domain.UsageWindow
+import com.inscreenlock.app.domain.WeekUsage
+import com.inscreenlock.app.domain.WeekUsageCalculator
 import com.inscreenlock.app.domain.rankUsageByPackage
 import com.inscreenlock.app.domain.recentForegroundPackage
 import java.time.ZoneId
@@ -48,6 +50,17 @@ class UsageStatsReader(private val context: Context) {
 
     fun todayTotals(nowMs: Long = System.currentTimeMillis(), zoneId: ZoneId = ZoneId.systemDefault()): UsageTotals? =
         todaySnapshot(nowMs, zoneId)?.totals
+
+    /** On-demand historical query for the seven local calendar days, including partial today. */
+    fun weekUsage(nowMs: Long = System.currentTimeMillis(), zone: ZoneId = ZoneId.systemDefault()): WeekUsage {
+        if (!hasUsageAccess()) return WeekUsageCalculator.unavailable(nowMs, zone)
+        val manager = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
+            ?: return WeekUsageCalculator.unavailable(nowMs, zone)
+        val excludedPackages = excludedPackages()
+        return WeekUsageCalculator.calculate(nowMs, zone, query = { startMs, endMs ->
+            readSignals(manager, startMs, endMs)
+        }, excludedPackages = excludedPackages)
+    }
 
     fun todaySnapshot(
         nowMs: Long = System.currentTimeMillis(),
