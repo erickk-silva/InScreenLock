@@ -11,6 +11,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.captureToImage
@@ -63,6 +64,13 @@ class VisualStatesCaptureTest {
         }
         activityRule.waitForIdle()
         activityRule.onNodeWithText("Mais foco, menos rolagem.", substring = false).assertIsDisplayed()
+        val progressPixels = activityRule.onNodeWithTag("splash-progress").captureToImage().toPixelMap()
+        val hasMintSegment = (5..95).any { percent ->
+            val x = (progressPixels.width * percent / 100).coerceIn(0, progressPixels.width - 1)
+            val pixel = progressPixels[x, progressPixels.height / 2]
+            pixel.green > 0.5f && pixel.green > pixel.red * 1.5f
+        }
+        assertTrue("Splash progress must show a visible primary segment", hasMintSegment)
         capture("splash-loading")
         activityRule.activity.runOnUiThread {
             activityRule.activity.setContent { InScreenLockTheme { OnboardingScreen(onSkip = {}, onStart = {}) } }

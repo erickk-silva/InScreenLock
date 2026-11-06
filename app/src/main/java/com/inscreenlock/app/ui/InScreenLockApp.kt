@@ -124,6 +124,11 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.ui.viewinterop.AndroidView
 import android.widget.ImageView
 import java.time.format.TextStyle as DateTextStyle
@@ -323,6 +328,13 @@ internal fun FirstLaunchFlow(consentAccepted: Boolean, onAccept: () -> Unit) {
 
 @Composable
 internal fun SplashLoadingScreen(modifier: Modifier = Modifier) {
+    val progressTransition = rememberInfiniteTransition(label = "splash-progress")
+    val visibleProgress by progressTransition.animateFloat(
+        initialValue = 0.18f,
+        targetValue = 0.82f,
+        animationSpec = infiniteRepeatable(animation = tween(durationMillis = 900, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
+        label = "splash-progress-segment",
+    )
     Box(
         modifier.fillMaxSize().background(Brush.radialGradient(listOf(Color(0x3322E3B0), Background, Background), center = Offset.Zero, radius = 760f)),
         contentAlignment = Alignment.Center,
@@ -335,6 +347,7 @@ internal fun SplashLoadingScreen(modifier: Modifier = Modifier) {
             Text("Mais foco, menos rolagem.", color = Muted, style = MaterialTheme.typography.bodyLarge)
         }
         LinearProgressIndicator(
+            progress = { visibleProgress },
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 64.dp).padding(bottom = 42.dp).height(3.dp).testTag("splash-progress"),
             color = Mint,
             trackColor = InScreenLockColors.Surface,
