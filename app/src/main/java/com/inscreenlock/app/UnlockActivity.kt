@@ -143,10 +143,12 @@ internal fun UnlockScreen(
                         onDigit = { digit -> pin = onDigit(pin, digit.toString()); error = "" },
                         onBackspace = { pin = onDelete(pin); error = "" },
                         enteredCount = pin.length,
+                        beforeKeyboard = {
+                            if (error.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("pin-error"))
+                        },
                     )
                     Spacer(Modifier.height(8.dp))
                     PrimaryAction("Desbloquear", { onPinSubmit(pin) { error = it } }, Modifier.fillMaxWidth().testTag("pin-submit"), enabled = pin.length in 4..8)
-                    if (error.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("pin-error"))
                 }
                 Spacer(Modifier.height(12.dp))
                 PrimaryAction(if (confirmingChange) "Cancelar" else "Voltar", onCancel, Modifier.fillMaxWidth(), secondary = true)

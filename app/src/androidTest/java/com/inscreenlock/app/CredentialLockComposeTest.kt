@@ -2,6 +2,10 @@ package com.inscreenlock.app
 
 import androidx.compose.material3.MaterialTheme
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertHeightIsAtLeast
@@ -63,6 +67,31 @@ class CredentialLockComposeTest {
         assertTrue(pinDisplay[SemanticsProperties.ContentDescription].joinToString().contains("2 de 8"))
         compose.onNodeWithTag("pin-digit-4").performClick()
         compose.onNodeWithTag("pin-digit-5").performClick()
+        compose.onNodeWithTag("pin-submit").performClick()
+        compose.onNodeWithTag("pin-error").assertIsDisplayed().assertTextContains("PIN incorreto")
+    }
+
+    @Test fun pinErrorRemainsVisibleOnCompactViewport() {
+        compose.activity.runOnUiThread {
+            compose.activity.setContent {
+                MaterialTheme {
+                    Box(Modifier.requiredSize(360.dp, 640.dp).clipToBounds()) {
+                        UnlockScreen(
+                            hasPin = true,
+                            canUseDeviceCredential = true,
+                            confirmingChange = false,
+                            onDigit = { value, digit -> value + digit },
+                            onDelete = { it.dropLast(1) },
+                            onPinSubmit = { _, showError -> showError("PIN incorreto") },
+                            onDeviceCredential = {},
+                            onCancel = {},
+                        )
+                    }
+                }
+            }
+        }
+        compose.waitForIdle()
+        (1..4).forEach { compose.onNodeWithTag("pin-digit-$it").performClick() }
         compose.onNodeWithTag("pin-submit").performClick()
         compose.onNodeWithTag("pin-error").assertIsDisplayed().assertTextContains("PIN incorreto")
     }

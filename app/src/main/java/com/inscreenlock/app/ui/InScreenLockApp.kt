@@ -579,7 +579,7 @@ internal fun AnalysisScreen(
     onRetry: () -> Unit,
 ) {
     var weekSelected by rememberSaveable { mutableStateOf(true) }
-    Column(modifier.fillMaxSize().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = 640.dp).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
+    Column(modifier.fillMaxSize().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = 640.dp).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
         ScreenHeader("Análises", subtitle = "Uso real no aparelho")
         Row(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(false to "Dia", true to "Semana").forEach { (weekTab, label) ->
@@ -663,10 +663,12 @@ private fun WeeklyAppDistribution(week: WeekUsage) {
             else {
                 val total = totals.sumOf { it.second }.coerceAtLeast(1L)
                 totals.take(10).forEach { (packageName, duration) ->
-                    val label = remember(packageName, context) { runCatching {
+                        val label = remember(packageName, context) { runCatching {
                         val info = context.packageManager.getApplicationInfo(packageName, 0)
                         context.packageManager.getApplicationLabel(info).toString()
-                    }.getOrDefault(packageName) }
+                        }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() && it != packageName }
+                            ?: packageName.substringAfterLast('.').split(Regex("[_-]+")).filter { it.isNotBlank() }
+                                .joinToString(" ") { part -> part.replaceFirstChar { char -> char.titlecase(Locale.getDefault()) } } }
                     Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(label, Modifier.weight(1f), color = MainText, maxLines = 1)
                         Text("${(duration * 100 / total)}% · ${formatDuration(duration)}", color = Muted, style = MaterialTheme.typography.labelMedium)
@@ -748,7 +750,7 @@ internal fun MoreScreen(
 ) {
     var confirmation by remember { mutableStateOf(false) }
     val credentialAvailable = deviceSecure || settings.hasPin
-    Column(modifier.fillMaxSize().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = 640.dp).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
+    Column(modifier.fillMaxSize().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = 640.dp).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
         ScreenHeader("Mais", subtitle = "Permissões, credencial e privacidade")
         SurfaceCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
@@ -756,8 +758,6 @@ internal fun MoreScreen(
                 StyledPermissionRow("Acesso de uso", usageAvailable, onOpenUsageSettings, activeLabel = "Ativo", inactiveLabel = "Não concedido", actionLabel = "Abrir")
                 StyledPermissionRow("Acessibilidade", accessibilityEnabled, onOpenAccessibilitySettings, activeLabel = "Ativa", inactiveLabel = "Não concedida", actionLabel = "Abrir")
                 Text("O Android controla a Acessibilidade. O InScreenLock não pode concedê-la por você.", color = Muted, style = MaterialTheme.typography.bodySmall)
-                OutlinedButton(onClick = onOpenUsageSettings, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Abrir Acesso de uso") }
-                OutlinedButton(onClick = onOpenAccessibilitySettings, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Abrir configurações de Acessibilidade") }
             }
         }
         Spacer(Modifier.height(12.dp))
@@ -776,7 +776,6 @@ internal fun MoreScreen(
         MoreActionCard("Credencial de desbloqueio", if (settings.hasPin) "PIN configurado" else "PIN ou credencial do aparelho", onOpenCredential)
         MoreActionCard("Privacidade e dados", "Dados locais e controles", onOpenPrivacy)
         MoreActionCard("Sobre", "Versão instalada", onOpenAbout)
-        Spacer(Modifier.height(24.dp))
     }
     if (confirmation) ConfirmationDialog("Sem credencial configurada, o bloqueio por limite está indisponível. Deseja desativar o monitoramento?", { confirmation = false }, { confirmation = false; onMonitoringChanged(false) })
 }

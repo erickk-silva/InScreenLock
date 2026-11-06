@@ -70,7 +70,7 @@ class VisualStatesCaptureTest {
         val withData = WeekUsage((6 downTo 0).map { daysAgo ->
             val available = daysAgo % 3 != 0
             DayUsage(now.minusDays(daysAgo.toLong()), available, if (available) (daysAgo + 1) * MINUTE_MS else 0L,
-                if (available) mapOf("com.synthetic.fixture" to (daysAgo + 1) * MINUTE_MS) else emptyMap())
+                if (available) mapOf("com.synthetic.focus" to (daysAgo + 1) * MINUTE_MS) else emptyMap())
         })
         showOnScaffold("ANALYSIS") { insets ->
             AnalysisScreen(modifier = Modifier.padding(insets), todayTotals = null, todayAvailable = false, week = withData, loading = false, failed = false, onRetry = {})
@@ -78,6 +78,7 @@ class VisualStatesCaptureTest {
         activityRule.onNodeWithText("Tempo por dia", substring = false).assertIsDisplayed()
         activityRule.onAllNodesWithText("sem dados", substring = false).assertCountEquals(3)
         activityRule.onNodeWithText("Distribuição por app na semana", substring = false).assertIsDisplayed()
+        activityRule.onNodeWithText("Focus", substring = false).assertIsDisplayed()
         activityRule.onAllNodesWithText("sem dados", substring = false)[0].assertIsDisplayed()
         capture("analysis-week-synthetic")
 

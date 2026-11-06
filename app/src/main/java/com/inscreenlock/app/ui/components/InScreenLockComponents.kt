@@ -134,8 +134,8 @@ fun ProgressRing(progress: Float, valueLabel: String, modifier: Modifier = Modif
         ProgressLevel.EXCEEDED -> InScreenLockColors.Alert
     }
     val trackColor = InScreenLockColors.Background
-    BoxWithConstraints(modifier.fillMaxWidth()) {
-        val diameter = minOf(maxWidth * 0.60f, 240.dp)
+    BoxWithConstraints(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        val diameter = minOf(maxWidth * 0.67f, 220.dp)
         Box(Modifier.size(diameter).semantics(mergeDescendants = true) { this.contentDescription = contentDescription }, contentAlignment = Alignment.Center) {
             Canvas(Modifier.fillMaxSize().clearAndSetSemantics {}) {
                 val stroke = 14.dp.toPx()
@@ -235,27 +235,30 @@ fun PermissionRow(label: String, isActive: Boolean, onAction: () -> Unit, modifi
             Text(label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
             Text(if (isActive) activeLabel else inactiveLabel, style = MaterialTheme.typography.labelMedium, color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
         }
-        if (!isActive) Text(actionLabel, Modifier.clickable(role = Role.Button, onClick = onAction).padding(8.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+        if (!isActive) Box(Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp).clickable(role = Role.Button, onClick = onAction).padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
+            Text(actionLabel, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+        }
     }
 }
 
 @Composable
-fun PinInput(digitCount: Int, onDigit: (Int) -> Unit, onBackspace: () -> Unit, modifier: Modifier = Modifier, enteredCount: Int = 0, enabled: Boolean = true, digitDescription: String = "dígito") {
-    Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.semantics { contentDescription = "${enteredCount.coerceIn(0, digitCount)} de $digitCount dígitos digitados" }.testTag("pin-display")) {
+fun PinInput(digitCount: Int, onDigit: (Int) -> Unit, onBackspace: () -> Unit, modifier: Modifier = Modifier, enteredCount: Int = 0, enabled: Boolean = true, digitDescription: String = "dígito", beforeKeyboard: (@Composable () -> Unit)? = null) {
+    Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.semantics { contentDescription = "${enteredCount.coerceIn(0, digitCount)} de $digitCount dígitos digitados" }.testTag("pin-display")) {
             repeat(digitCount.coerceAtLeast(0)) { index ->
-                Box(Modifier.size(width = 42.dp, height = 48.dp).clip(RoundedCornerShape(10.dp)).background(InScreenLockColors.Surface).clearAndSetSemantics { }, contentAlignment = Alignment.Center) {
+                Box(Modifier.size(width = 38.dp, height = 40.dp).clip(RoundedCornerShape(10.dp)).background(InScreenLockColors.Surface).clearAndSetSemantics { }, contentAlignment = Alignment.Center) {
                     if (index < enteredCount) Box(Modifier.size(10.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
                 }
             }
         }
+        beforeKeyboard?.invoke()
         val keys = listOf(1, 2, 3, 4, 5, 6, 7, 8, 9, -1, 0, -2)
         keys.chunked(3).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 row.forEach { digit ->
                     val label = when (digit) { -1 -> ""; -2 -> "Apagar"; else -> digit.toString() }
                     Surface(
-                        modifier = Modifier.size(64.dp).clickable(enabled = enabled, role = Role.Button) { if (digit == -2) onBackspace() else if (digit >= 0) onDigit(digit) }.semantics { contentDescription = if (digit >= 0) "$digit, $digitDescription" else label }.then(when { digit >= 0 -> Modifier.testTag("pin-digit-$digit"); digit == -2 -> Modifier.testTag("pin-delete"); else -> Modifier }),
+                        modifier = Modifier.size(width = 52.dp, height = 48.dp).clickable(enabled = enabled, role = Role.Button) { if (digit == -2) onBackspace() else if (digit >= 0) onDigit(digit) }.semantics { contentDescription = if (digit >= 0) "$digit, $digitDescription" else label }.then(when { digit >= 0 -> Modifier.testTag("pin-digit-$digit"); digit == -2 -> Modifier.testTag("pin-delete"); else -> Modifier }),
                         shape = CircleShape,
                         color = if (digit == -1) Color.Transparent else MaterialTheme.colorScheme.surface,
                     ) { Box(contentAlignment = Alignment.Center) { if (digit == -2) Text("⌫", style = MaterialTheme.typography.titleLarge) else Text(label, style = MaterialTheme.typography.titleLarge) } }
