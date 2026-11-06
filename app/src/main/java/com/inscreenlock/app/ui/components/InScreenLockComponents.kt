@@ -1,6 +1,8 @@
 package com.inscreenlock.app.ui.components
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -33,11 +35,15 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.animation.core.Animatable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,11 +60,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.core.graphics.createBitmap
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.res.painterResource
 import com.inscreenlock.app.R
 import com.inscreenlock.app.ui.theme.InScreenLockColors
+import com.inscreenlock.app.ui.theme.InScreenLockMotion
+import dev.chrisbanes.haze.HazeInput
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.HazeColorEffect
+import dev.chrisbanes.haze.blur.hazeBlur
 
 data class AppBarItem(val label: String, val contentDescription: String, val selected: Boolean, val onClick: () -> Unit, val icon: @Composable () -> Unit)
 
@@ -68,11 +82,20 @@ fun AppScaffold(
     bottomBarItems: List<AppBarItem> = emptyList(),
     content: @Composable (PaddingValues) -> Unit,
 ) {
+    val hazeState = rememberHazeState()
+    val blurStyle = remember { HazeBlurStyle {
+        blurRadius(20.dp)
+        colorEffects(listOf(HazeColorEffect.tint(InScreenLockColors.Surface.copy(alpha = 0.48f))))
+        fallbackColorEffect(HazeColorEffect.tint(InScreenLockColors.Surface.copy(alpha = 0.94f)))
+    } }
     Scaffold(
         modifier = modifier,
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            if (bottomBarItems.isNotEmpty()) NavigationBar(containerColor = InScreenLockColors.Surface) {
+            if (bottomBarItems.isNotEmpty()) NavigationBar(
+                modifier = Modifier.hazeBlur(HazeInput.Sources(hazeState), blurStyle),
+                containerColor = Color.Transparent,
+            ) {
                 bottomBarItems.forEach { item ->
                     NavigationBarItem(
                         selected = item.selected,
@@ -91,7 +114,9 @@ fun AppScaffold(
                 }
             }
         },
-        content = content,
+        content = { padding ->
+            Box(Modifier.fillMaxSize().hazeSource(hazeState)) { content(padding) }
+        },
     )
 }
 
@@ -137,6 +162,10 @@ enum class ProgressLevel { NORMAL, ATTENTION, EXCEEDED }
 
 @Composable
 fun ProgressRing(progress: Float, valueLabel: String, modifier: Modifier = Modifier, level: ProgressLevel = ProgressLevel.NORMAL, contentDescription: String = valueLabel, content: (@Composable () -> Unit)? = null) {
+    val ringProgress = remember { Animatable(0f) }
+    LaunchedEffect(progress) {
+        ringProgress.animateTo(progress.coerceIn(0f, 1f), animationSpec = InScreenLockMotion.spatialSpring())
+    }
     val ringColor = when (level) {
         ProgressLevel.NORMAL -> MaterialTheme.colorScheme.primary
         ProgressLevel.ATTENTION -> Color(0xFFFFC857)
@@ -149,7 +178,7 @@ fun ProgressRing(progress: Float, valueLabel: String, modifier: Modifier = Modif
             Canvas(Modifier.fillMaxSize().clearAndSetSemantics {}) {
                 val stroke = 14.dp.toPx()
                 drawArc(trackColor, -90f, 360f, false, style = Stroke(stroke, cap = StrokeCap.Round))
-                drawArc(ringColor, -90f, 360f * progress.coerceIn(0f, 1f), false, style = Stroke(stroke, cap = StrokeCap.Round))
+                drawArc(ringColor, -90f, 360f * ringProgress.value, false, style = Stroke(stroke, cap = StrokeCap.Round))
             }
             if (content != null) content() else Text(valueLabel, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
         }
@@ -205,7 +234,7 @@ fun StatusBanner(message: String, level: BannerLevel, modifier: Modifier = Modif
         BannerLevel.WARNING -> MaterialTheme.colorScheme.tertiary
         BannerLevel.ERROR -> MaterialTheme.colorScheme.error
     }
-    Surface(modifier = modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = color.copy(alpha = 0.12f), contentColor = MaterialTheme.colorScheme.onSurface) {
+    Surface(modifier = modifier.fillMaxWidth().animateContentSize(animationSpec = InScreenLockMotion.spatialSpring<androidx.compose.ui.unit.IntSize>()), shape = RoundedCornerShape(16.dp), color = color.copy(alpha = 0.12f), contentColor = MaterialTheme.colorScheme.onSurface) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Image(painterResource(if (level == BannerLevel.INFO) R.drawable.ic_status_info else R.drawable.ic_status_alert), null, Modifier.size(24.dp), colorFilter = if (level == BannerLevel.INFO) null else ColorFilter.tint(color))
             Column(Modifier.weight(1f)) {
@@ -279,6 +308,10 @@ fun PinInput(digitCount: Int, onDigit: (Int) -> Unit, onBackspace: () -> Unit, m
 
 @Composable
 fun PrimaryAction(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, secondary: Boolean = false, leadingContent: (@Composable () -> Unit)? = null, interactionSource: MutableInteractionSource? = null) {
+    val interactions = interactionSource ?: androidx.compose.runtime.remember { MutableInteractionSource() }
+    val pressed = interactions.collectIsPressedAsState().value
+    val scale = androidx.compose.animation.core.animateFloatAsState(if (pressed) 0.97f else 1f, animationSpec = InScreenLockMotion.effectsSpring(), label = "button-press").value
+    val pressModifier = modifier.graphicsLayer { scaleX = scale; scaleY = scale }
     val content: @Composable RowScope.() -> Unit = {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             leadingContent?.invoke()
@@ -286,8 +319,8 @@ fun PrimaryAction(label: String, onClick: () -> Unit, modifier: Modifier = Modif
         }
     }
     if (secondary) {
-        OutlinedButton(onClick = onClick, modifier = modifier.defaultMinSize(minHeight = 48.dp), enabled = enabled, shape = RoundedCornerShape(50), interactionSource = interactionSource, content = content)
+        OutlinedButton(onClick = onClick, modifier = pressModifier.defaultMinSize(minHeight = 48.dp), enabled = enabled, shape = RoundedCornerShape(50), interactionSource = interactions, content = content)
     } else {
-        Button(onClick = onClick, modifier = modifier.defaultMinSize(minHeight = 48.dp), enabled = enabled, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary), interactionSource = interactionSource, content = content)
+        Button(onClick = onClick, modifier = pressModifier.defaultMinSize(minHeight = 48.dp), enabled = enabled, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary), interactionSource = interactions, content = content)
     }
 }

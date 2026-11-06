@@ -112,6 +112,7 @@ import com.inscreenlock.app.ui.components.ScreenHeader
 import com.inscreenlock.app.ui.components.StatusBanner
 import com.inscreenlock.app.ui.components.SurfaceCard
 import com.inscreenlock.app.ui.theme.InScreenLockColors
+import com.inscreenlock.app.ui.theme.InScreenLockMotion
 import com.inscreenlock.app.ui.theme.InScreenLockTheme as DesignTheme
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
@@ -130,6 +131,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.LinearEasing
@@ -144,6 +147,12 @@ import androidx.compose.ui.viewinterop.AndroidView
 import android.widget.ImageView
 import java.time.format.TextStyle as DateTextStyle
 import java.util.Locale
+import dev.chrisbanes.haze.HazeInput
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.HazeColorEffect
+import dev.chrisbanes.haze.blur.hazeBlur
 
 private val Background = InScreenLockColors.Background
 private val Border = InScreenLockColors.Outline
@@ -258,7 +267,15 @@ fun InScreenLockApp(
                         navItem("Mais", "MORE", selectedRoute, R.drawable.ic_nav_more) { selectedRouteName = MainRoute.MORE.name; moreRouteName = MoreRoute.ROOT.name },
                     )
                     AppScaffold(bottomBarItems = tabItems) { insets ->
-                        when (selectedRoute) {
+                        AnimatedContent(
+                            targetState = selectedRoute,
+                            transitionSpec = {
+                                (fadeIn(InScreenLockMotion.effectsSpring()) + slideInHorizontally(InScreenLockMotion.spatialSpring()) { it / 14 })
+                                    .togetherWith(fadeOut(InScreenLockMotion.effectsSpring()) + slideOutHorizontally(InScreenLockMotion.spatialSpring()) { -it / 14 })
+                            },
+                            label = "tab-transition",
+                        ) { route ->
+                        when (route) {
                             MainRoute.HOME -> DashboardScreen(
                                 modifier = Modifier.padding(insets), settings = settings,
                                 totals = usageTotals, appUsage = if (usageAvailable) appUsage else null,
@@ -317,6 +334,7 @@ fun InScreenLockApp(
                                     Text("Controle de tempo e foco com privacidade. Os dados de uso permanecem no aparelho.", color = Muted)
                                 }
                             }
+                        }
                         }
                     }
                 }
@@ -381,9 +399,16 @@ internal fun OnboardingScreen(
     animationsEnabled: Boolean = systemAnimationsEnabled(LocalContext.current),
 ) {
     val context = LocalContext.current
-    Box(modifier.fillMaxSize().background(Brush.radialGradient(listOf(Color(0x3322E3B0), Background, Background), center = Offset.Zero, radius = 760f))) {
+    val hazeState = rememberHazeState()
+    val glassStyle = remember { HazeBlurStyle {
+        blurRadius(22.dp)
+        colorEffects(listOf(HazeColorEffect.tint(InScreenLockColors.Surface.copy(alpha = 0.30f))))
+        fallbackColorEffect(HazeColorEffect.tint(InScreenLockColors.Surface.copy(alpha = 0.86f)))
+    } }
+    Box(modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().background(Brush.radialGradient(listOf(Color(0x5522E3B0), Background, Background), center = Offset.Zero, radius = 760f)).hazeSource(hazeState))
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            OnboardingEntry(0, animationsEnabled) { OnboardingIllustration(context, animationsEnabled) }
+            OnboardingEntry(0, animationsEnabled) { OnboardingIllustration(context, animationsEnabled, hazeState, glassStyle) }
             Spacer(Modifier.height(22.dp))
             OnboardingEntry(1, animationsEnabled) {
                 Text("Controle seu tempo\nnas redes sociais", color = MainText, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
@@ -426,13 +451,13 @@ private fun OnboardingEntry(order: Int, animationsEnabled: Boolean, modifier: Mo
     androidx.compose.animation.AnimatedVisibility(
         visible = visible,
         modifier = modifier,
-        enter = fadeIn(spring(stiffness = 420f)) + slideInVertically(spring(stiffness = 420f)) { it / 10 },
+        enter = fadeIn(InScreenLockMotion.effectsSpring<Float>()) + slideInVertically(InScreenLockMotion.spatialSpring<androidx.compose.ui.unit.IntOffset>()) { it / 10 },
         content = { content() },
     )
 }
 
 @Composable
-private fun OnboardingIllustration(context: Context, animationsEnabled: Boolean) {
+private fun OnboardingIllustration(context: Context, animationsEnabled: Boolean, hazeState: dev.chrisbanes.haze.HazeState, glassStyle: HazeBlurStyle) {
     val transition = if (animationsEnabled) rememberInfiniteTransition(label = "onboarding-float") else null
     val floatY: State<Float> = if (transition == null) remember { mutableFloatStateOf(0f) } else transition.animateFloat(
         initialValue = -4f, targetValue = 4f,
@@ -482,7 +507,8 @@ private fun OnboardingIllustration(context: Context, animationsEnabled: Boolean)
                     }
                 }
                 .clip(RoundedCornerShape(28.dp))
-                .background(Brush.linearGradient(listOf(Color(0xFF22303C), Color(0xFF101820), Color(0xFF17242B))))
+                .hazeBlur(HazeInput.Sources(hazeState), glassStyle)
+                .background(Brush.linearGradient(listOf(Color(0x8822303C), Color(0x88101820), Color(0x8817242B))))
                 .border(1.dp, Color(0x8853CDB8), RoundedCornerShape(28.dp)),
         ) {
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
