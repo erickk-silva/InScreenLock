@@ -46,6 +46,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -56,7 +58,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.testTag
@@ -112,8 +119,9 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.border
 import androidx.compose.animation.AnimatedVisibility
@@ -129,6 +137,9 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.viewinterop.AndroidView
 import android.widget.ImageView
 import java.time.format.TextStyle as DateTextStyle
@@ -363,50 +374,155 @@ private fun BrandBadge(modifier: Modifier = Modifier) {
 }
 
 @Composable
-internal fun OnboardingScreen(onSkip: () -> Unit, onStart: () -> Unit, modifier: Modifier = Modifier) {
+internal fun OnboardingScreen(
+    onSkip: () -> Unit,
+    onStart: () -> Unit,
+    modifier: Modifier = Modifier,
+    animationsEnabled: Boolean = systemAnimationsEnabled(LocalContext.current),
+) {
     val context = LocalContext.current
-    var entered by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { entered = true }
     Box(modifier.fillMaxSize().background(Brush.radialGradient(listOf(Color(0x3322E3B0), Background, Background), center = Offset.Zero, radius = 760f))) {
-        androidx.compose.animation.AnimatedVisibility(
-            visible = entered,
-            enter = fadeIn(tween(240)) + slideInVertically(tween(240)) { it / 24 },
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                OnboardingIllustration(context)
-                Spacer(Modifier.height(22.dp))
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            OnboardingEntry(0, animationsEnabled) { OnboardingIllustration(context, animationsEnabled) }
+            Spacer(Modifier.height(22.dp))
+            OnboardingEntry(1, animationsEnabled) {
                 Text("Controle seu tempo\nnas redes sociais", color = MainText, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-                Spacer(Modifier.height(12.dp))
+            }
+            Spacer(Modifier.height(12.dp))
+            OnboardingEntry(2, animationsEnabled) {
                 Text("Defina limites, acompanhe o uso e evite o excesso de rolagem.", color = Muted, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
-                Spacer(Modifier.height(16.dp))
-                OnboardingTrustCard()
-                Spacer(Modifier.height(20.dp))
-                PrimaryAction("Começar  →", onStart, Modifier.fillMaxWidth().testTag("onboarding-start"))
+            }
+            Spacer(Modifier.height(16.dp))
+            OnboardingEntry(3, animationsEnabled) { OnboardingTrustCard() }
+            Spacer(Modifier.height(20.dp))
+            val startInteractions = remember { MutableInteractionSource() }
+            val startPressed by startInteractions.collectIsPressedAsState()
+            OnboardingEntry(4, animationsEnabled) {
+                PrimaryAction(
+                    "Começar", onStart,
+                    Modifier.fillMaxWidth().graphicsLayer {
+                        val scale = if (animationsEnabled && startPressed) .97f else 1f
+                        scaleX = scale; scaleY = scale
+                    }.testTag("onboarding-start"),
+                    interactionSource = startInteractions,
+                )
             }
         }
-        androidx.compose.animation.AnimatedVisibility(
-            visible = entered,
-            enter = fadeIn(tween(240)) + slideInVertically(tween(240)) { it / 30 },
-            modifier = Modifier.align(Alignment.TopEnd).padding(top = 10.dp, end = 20.dp),
-        ) {
+        OnboardingEntry(0, animationsEnabled, Modifier.align(Alignment.TopEnd).padding(top = 10.dp, end = 20.dp)) {
             Text("Pular", color = Muted, modifier = Modifier.clickable(onClick = onSkip).heightIn(min = 48.dp).padding(12.dp).testTag("onboarding-skip"))
         }
     }
 }
 
 @Composable
-private fun OnboardingIllustration(context: Context) {
+private fun OnboardingEntry(order: Int, animationsEnabled: Boolean, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    var visible by remember(animationsEnabled, order) { mutableStateOf(!animationsEnabled) }
+    LaunchedEffect(animationsEnabled, order) {
+        if (animationsEnabled) {
+            delay(order * 70L)
+            visible = true
+        }
+    }
+    androidx.compose.animation.AnimatedVisibility(
+        visible = visible,
+        modifier = modifier,
+        enter = fadeIn(spring(stiffness = 420f)) + slideInVertically(spring(stiffness = 420f)) { it / 10 },
+        content = { content() },
+    )
+}
+
+@Composable
+private fun OnboardingIllustration(context: Context, animationsEnabled: Boolean) {
+    val transition = if (animationsEnabled) rememberInfiniteTransition(label = "onboarding-float") else null
+    val floatY: State<Float> = if (transition == null) remember { mutableFloatStateOf(0f) } else transition.animateFloat(
+        initialValue = -4f, targetValue = 4f,
+        animationSpec = infiniteRepeatable(tween(2000), repeatMode = RepeatMode.Reverse), label = "card-float",
+    )
+    val firstIconFloat: State<Float> = if (transition == null) remember { mutableFloatStateOf(0f) } else transition.animateFloat(
+        initialValue = -1.5f, targetValue = 1.5f,
+        animationSpec = infiniteRepeatable(tween(1500, delayMillis = 180), repeatMode = RepeatMode.Reverse), label = "first-icon-float",
+    )
+    val secondIconFloat: State<Float> = if (transition == null) remember { mutableFloatStateOf(0f) } else transition.animateFloat(
+        initialValue = 1.5f, targetValue = -1.5f,
+        animationSpec = infiniteRepeatable(tween(1700, delayMillis = 290), repeatMode = RepeatMode.Reverse), label = "second-icon-float",
+    )
+    val tiltX = remember { Animatable(0f) }
+    val tiltY = remember { Animatable(0f) }
+    val gestureScope = rememberCoroutineScope()
+    val density = androidx.compose.ui.platform.LocalDensity.current.density
     Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
-        Box(Modifier.size(width = 168.dp, height = 192.dp).rotate(12f).clip(RoundedCornerShape(28.dp)).background(Brush.linearGradient(listOf(Color(0xFF22303C), Color(0xFF101820), Color(0xFF17242B)))).border(1.dp, Color(0x8853CDB8), RoundedCornerShape(28.dp))) {
+        Box(
+            Modifier.size(width = 168.dp, height = 192.dp)
+                .graphicsLayer {
+                    translationY = floatY.value * density
+                    rotationZ = 12f
+                    rotationX = if (animationsEnabled) tiltX.value else 0f
+                    rotationY = if (animationsEnabled) tiltY.value else 0f
+                    cameraDistance = 12f * density
+                }
+                .pointerInput(animationsEnabled) {
+                    if (animationsEnabled) {
+                        detectDragGestures(
+                            onDragEnd = {
+                                gestureScope.launch { tiltX.animateTo(0f, spring(dampingRatio = .55f)) }
+                                gestureScope.launch { tiltY.animateTo(0f, spring(dampingRatio = .55f)) }
+                            },
+                            onDragCancel = {
+                                gestureScope.launch { tiltX.animateTo(0f, spring()) }
+                                gestureScope.launch { tiltY.animateTo(0f, spring()) }
+                            },
+                            onDrag = { change, drag ->
+                                change.consume()
+                                gestureScope.launch {
+                                    tiltY.snapTo((tiltY.value + drag.x * .16f).coerceIn(-12f, 12f))
+                                    tiltX.snapTo((tiltX.value - drag.y * .16f).coerceIn(-12f, 12f))
+                                }
+                            },
+                        )
+                    }
+                }
+                .clip(RoundedCornerShape(28.dp))
+                .background(Brush.linearGradient(listOf(Color(0xFF22303C), Color(0xFF101820), Color(0xFF17242B))))
+                .border(1.dp, Color(0x8853CDB8), RoundedCornerShape(28.dp)),
+        ) {
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                OnboardingAppIcon(context, "com.zhiliaoapp.musically", "TikTok")
+                OnboardingAppIcon(context, "com.zhiliaoapp.musically", "TikTok", R.drawable.ic_fallback_music, firstIconFloat)
                 Spacer(Modifier.height(16.dp))
-                OnboardingAppIcon(context, "com.instagram.android", "Instagram")
+                OnboardingAppIcon(context, "com.instagram.android", "Instagram", R.drawable.ic_fallback_camera, secondIconFloat)
             }
         }
-        Box(Modifier.align(Alignment.BottomCenter).offset(x = 75.dp, y = (-2).dp).size(62.dp).clip(RoundedCornerShape(22.dp)).background(Color(0xFF102C2B)).border(1.dp, Mint, RoundedCornerShape(22.dp)), contentAlignment = Alignment.Center) {
-            Image(painterResource(R.drawable.ic_lock_symbol), contentDescription = null, modifier = Modifier.size(32.dp))
+        OnboardingLockBadge(Modifier.align(Alignment.BottomCenter).offset(x = 75.dp, y = (-2).dp), animationsEnabled)
+    }
+}
+
+@Composable
+private fun OnboardingLockBadge(modifier: Modifier, animationsEnabled: Boolean) {
+    val haptics = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
+    val scale = remember { Animatable(1f) }
+    val pulse = remember { Animatable(0f) }
+    Box(
+        modifier.size(72.dp)
+            .graphicsLayer { scaleX = if (animationsEnabled) scale.value else 1f; scaleY = if (animationsEnabled) scale.value else 1f }
+            .drawBehind {
+                val alpha = if (animationsEnabled) pulse.value * .38f else 0f
+                if (alpha > 0f) drawCircle(Mint.copy(alpha = alpha), radius = size.minDimension * .55f)
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier.size(62.dp).clip(RoundedCornerShape(22.dp)).background(Color(0xFF102C2B))
+                .border(1.dp, Mint, RoundedCornerShape(22.dp))
+                .clickable {
+                    if (animationsEnabled) {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        scope.launch { scale.snapTo(.9f); scale.animateTo(1.05f, spring(dampingRatio = .48f)); scale.animateTo(1f, spring()) }
+                        scope.launch { pulse.snapTo(1f); pulse.animateTo(0f, tween(520)) }
+                    }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Image(painterResource(R.drawable.ic_lock_symbol), contentDescription = "Segurança e bloqueio", modifier = Modifier.size(32.dp))
         }
     }
 }
@@ -434,11 +550,11 @@ private fun TrustRow(icon: Int, title: String, detail: String) {
 }
 
 @Composable
-private fun OnboardingAppIcon(context: Context, packageName: String, fallback: String) {
+private fun OnboardingAppIcon(context: Context, packageName: String, fallback: String, fallbackIcon: Int, floatY: State<Float>) {
     val icon = remember(packageName) { runCatching { context.packageManager.getApplicationIcon(packageName) }.getOrNull() }
-    Box(Modifier.size(62.dp).clip(RoundedCornerShape(18.dp)).background(Color(0xFF202833)).border(1.dp, Color(0x55FFFFFF), RoundedCornerShape(18.dp)), contentAlignment = Alignment.Center) {
+    Box(Modifier.size(62.dp).graphicsLayer { translationY = floatY.value * density }.clip(RoundedCornerShape(18.dp)).background(Color(0xFF202833)).border(1.dp, Color(0x55FFFFFF), RoundedCornerShape(18.dp)), contentAlignment = Alignment.Center) {
         if (icon != null) AndroidView(factory = { ImageView(it).apply { setImageDrawable(icon); contentDescription = fallback } }, modifier = Modifier.fillMaxSize().padding(7.dp))
-        else Text("•", color = Muted, style = MaterialTheme.typography.headlineMedium)
+        else Image(painterResource(fallbackIcon), contentDescription = "$fallback, ícone genérico", modifier = Modifier.size(30.dp))
     }
 }
 
@@ -946,7 +1062,7 @@ private fun MoreActionCard(title: String, description: String, onClick: () -> Un
     SurfaceCard(Modifier.fillMaxWidth().padding(bottom = 10.dp).clickable(onClick = onClick)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 68.dp).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) { Text(title, color = MainText, style = MaterialTheme.typography.titleSmall); Text(description, color = Muted, style = MaterialTheme.typography.bodySmall) }
-            Text("›", color = Mint, style = MaterialTheme.typography.headlineMedium)
+            Image(painterResource(R.drawable.ic_arrow_forward), contentDescription = null, modifier = Modifier.size(24.dp))
         }
     }
 }
@@ -959,9 +1075,7 @@ internal fun CredentialRoute(modifier: Modifier = Modifier, settings: UserSettin
     val credentialAvailable = deviceSecure || settings.hasPin
     var confirmation by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
     Column(modifier.fillMaxSize().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = 640.dp).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
-        ScreenHeader("Credencial de desbloqueio", subtitle = "PIN local de 4 a 8 dígitos", trailingContent = {
-            OutlinedButton(onClick = onBack, modifier = Modifier.heightIn(min = 48.dp)) { Text("← Voltar") }
-        })
+        ScreenHeader("Credencial de desbloqueio", subtitle = "PIN local de 4 a 8 dígitos", onBack = onBack)
         SurfaceCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(if (settings.hasPin) "Altere o PIN" else if (deviceSecure) "A credencial segura do aparelho também pode desbloquear." else "Defina um PIN para habilitar bloqueio com senha.", color = Muted)
@@ -984,7 +1098,6 @@ internal fun CredentialRoute(modifier: Modifier = Modifier, settings: UserSettin
                     else if (ProtectedChange.requiresConfirmation(ProtectedChange.ChangeOrRemovePin, credentialAvailable)) confirmation = "Deseja remover o PIN?" to action
                     else action()
                 }, modifier = Modifier.fillMaxWidth().testTag("pin-remove")) { Text("Remover PIN") }
-                PrimaryAction("Voltar", onBack, modifier = Modifier.fillMaxWidth(), secondary = true)
             }
         }
         Spacer(Modifier.height(24.dp))
@@ -995,12 +1108,17 @@ internal fun CredentialRoute(modifier: Modifier = Modifier, settings: UserSettin
 @Composable
 private fun PrivacyRoute(modifier: Modifier, settings: UserSettings, deviceSecure: Boolean, onBack: () -> Unit, onClear: () -> Unit, onAuthenticate: (() -> Unit) -> Unit) {
     var showDialog by remember { mutableStateOf(false) }
-    val privacyText = "Com Acesso de uso, o InScreenLock lê o tempo em primeiro plano de todos os apps de hoje somente para mostrar o painel neste aparelho; nada sai do aparelho nem é salvo. Sem conta, rede ou anúncios. O serviço recebe notificações de mudança de janela de qualquer app e lê apenas o nome do pacote para reconhecer entradas e saídas do Instagram/TikTok; descarta os demais e não guarda esses dados. Guardamos preferências e o maior limite já avisado no dia; o tempo vem do histórico de uso do Android. O bloqueio cobre a janela inteira do app, inclusive login, e oferece Início e desbloqueio por credencial. Desativar Acessibilidade nas configurações do Android encerra o bloqueio; isso é intencional pela política do Android. Desinstalar apaga os dados do InScreenLock. O histórico de Acesso de uso é do Android e nunca é copiado pelo app. Este APK privado ainda não passou por revisão de acessibilidade da Google Play."
     Column(modifier.fillMaxSize().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = 640.dp).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
-        ScreenHeader("Privacidade e dados", trailingContent = {
-            OutlinedButton(onClick = onBack, modifier = Modifier.heightIn(min = 48.dp)) { Text("← Voltar") }
-        })
-        SurfaceCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { Text(privacyText, color = Muted); PrimaryAction("Apagar preferências locais", { showDialog = true }, Modifier.fillMaxWidth(), secondary = true); PrimaryAction("Voltar", onBack, Modifier.fillMaxWidth(), secondary = true) } }
+        ScreenHeader("Privacidade e dados", onBack = onBack)
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            PrivacySection(R.drawable.ic_trust_permissions, "Uso medido", "Com Acesso de uso, o InScreenLock lê o tempo em primeiro plano de todos os apps de hoje somente para mostrar o painel neste aparelho; nada sai do aparelho nem é salvo. Sem conta, rede ou anúncios.")
+            PrivacySection(R.drawable.ic_trust_visibility, "O que o serviço reconhece", "O serviço recebe notificações de mudança de janela de qualquer app e lê apenas o nome do pacote para reconhecer entradas e saídas do Instagram/TikTok; descarta os demais e não guarda esses dados.")
+            PrivacySection(R.drawable.ic_trust_device, "O que fica salvo", "Guardamos preferências e o maior limite já avisado no dia; o tempo vem do histórico de uso do Android.")
+            PrivacySection(R.drawable.ic_lock_symbol, "Bloqueio e controles", "O bloqueio cobre a janela inteira do app, inclusive login, e oferece Início e desbloqueio por credencial. Desativar Acessibilidade nas configurações do Android encerra o bloqueio; isso é intencional pela política do Android. Desinstalar apaga os dados do InScreenLock.")
+            PrivacySection(R.drawable.ic_trust_device, "Histórico do Android", "O histórico de Acesso de uso é do Android e nunca é copiado pelo app.")
+            PrivacySection(R.drawable.ic_status_info, "Revisão de acessibilidade", "Este APK privado ainda não passou por revisão de acessibilidade da Google Play.")
+            PrimaryAction("Apagar preferências locais", { showDialog = true }, Modifier.fillMaxWidth(), secondary = true)
+        }
         Spacer(Modifier.height(24.dp))
     }
     if (showDialog) AlertDialog(onDismissRequest = { showDialog = false }, title = { Text("Apagar preferências?") }, text = { Text("O consentimento e as configurações locais serão removidos.") }, confirmButton = { Button(onClick = { showDialog = false; val action = { onClear() }; if (ProtectedChange.requiresAuthentication(ProtectedChange.ClearData, deviceSecure || settings.hasPin)) onAuthenticate(action) else action() }) { Text("Apagar") } }, dismissButton = { OutlinedButton(onClick = { showDialog = false }) { Text("Cancelar") } })
@@ -1009,11 +1127,21 @@ private fun PrivacyRoute(modifier: Modifier, settings: UserSettings, deviceSecur
 @Composable
 private fun SimpleDetailRoute(title: String, modifier: Modifier, onBack: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     Column(modifier.fillMaxSize().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = 640.dp).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
-        ScreenHeader(title, trailingContent = {
-            OutlinedButton(onClick = onBack, modifier = Modifier.heightIn(min = 48.dp)) { Text("← Voltar") }
-        })
+        ScreenHeader(title, onBack = onBack)
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
-        PrimaryAction("Voltar", onBack, Modifier.fillMaxWidth(), secondary = true)
+    }
+}
+
+@Composable
+private fun PrivacySection(icon: Int, title: String, body: String) {
+    SurfaceCard(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Image(painterResource(icon), contentDescription = null, modifier = Modifier.size(24.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(title, color = MainText, style = MaterialTheme.typography.titleSmall)
+                Text(body, color = Muted, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
     }
 }
 
@@ -1056,6 +1184,9 @@ private fun isAccessibilityServiceEnabled(context: Context): Boolean {
 private fun openUsageSettings(context: Context) {
     context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }
+
+private fun systemAnimationsEnabled(context: Context): Boolean =
+    runCatching { Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f }.getOrDefault(true)
 
 private fun openAccessibilitySettings(context: Context) {
     context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

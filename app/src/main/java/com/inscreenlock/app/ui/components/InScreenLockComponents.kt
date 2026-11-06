@@ -30,6 +30,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -93,13 +96,18 @@ fun AppScaffold(
 }
 
 @Composable
-fun ScreenHeader(title: String, modifier: Modifier = Modifier, subtitle: String? = null, trailingContent: (@Composable () -> Unit)? = null) {
+fun ScreenHeader(title: String, modifier: Modifier = Modifier, subtitle: String? = null, trailingContent: (@Composable () -> Unit)? = null, onBack: (() -> Unit)? = null) {
     Column(modifier.fillMaxWidth().padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Image(painterResource(R.drawable.ic_brand_mark), null, Modifier.size(28.dp))
             Text("InScreenLock", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
+            if (onBack != null) {
+                IconButton(onClick = onBack, modifier = Modifier.size(48.dp).testTag("detail-back")) {
+                    Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Voltar", tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(24.dp))
+                }
+            }
             Column(Modifier.weight(1f)) {
                 Text(title, modifier = Modifier.testTag("screen-title"), style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.onBackground)
                 if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -270,7 +278,7 @@ fun PinInput(digitCount: Int, onDigit: (Int) -> Unit, onBackspace: () -> Unit, m
 }
 
 @Composable
-fun PrimaryAction(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, secondary: Boolean = false, leadingContent: (@Composable () -> Unit)? = null) {
+fun PrimaryAction(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, secondary: Boolean = false, leadingContent: (@Composable () -> Unit)? = null, interactionSource: MutableInteractionSource? = null) {
     val content: @Composable RowScope.() -> Unit = {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             leadingContent?.invoke()
@@ -278,8 +286,8 @@ fun PrimaryAction(label: String, onClick: () -> Unit, modifier: Modifier = Modif
         }
     }
     if (secondary) {
-        OutlinedButton(onClick = onClick, modifier = modifier.defaultMinSize(minHeight = 48.dp), enabled = enabled, shape = RoundedCornerShape(50), content = content)
+        OutlinedButton(onClick = onClick, modifier = modifier.defaultMinSize(minHeight = 48.dp), enabled = enabled, shape = RoundedCornerShape(50), interactionSource = interactionSource, content = content)
     } else {
-        Button(onClick = onClick, modifier = modifier.defaultMinSize(minHeight = 48.dp), enabled = enabled, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary), content = content)
+        Button(onClick = onClick, modifier = modifier.defaultMinSize(minHeight = 48.dp), enabled = enabled, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary), interactionSource = interactionSource, content = content)
     }
 }

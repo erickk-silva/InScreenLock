@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -59,6 +60,29 @@ class RedesignNavigationComposeTest {
         activityRule.activity.onBackPressedDispatcher.onBackPressed()
         activityRule.waitForIdle()
         activityRule.onNodeWithTag("screen-title").assertTextEquals("Hoje")
+    }
+
+    @Test fun detailRoutesReturnUsingTopBackButtonAndSystemBack() {
+        val repository = SettingsRepository(activityRule.activity.applicationContext)
+        runBlocking { repository.acceptAccessibilityDisclosure() }
+        activityRule.activity.runOnUiThread {
+            activityRule.activity.setContent { InScreenLockApp(repository) }
+        }
+        activityRule.waitForIdle()
+        activityRule.onAllNodesWithText("Mais").get(0).performClick()
+        activityRule.onNodeWithText("Privacidade e dados").performClick()
+        activityRule.waitForIdle()
+        activityRule.onNodeWithText("Uso medido").assertIsDisplayed()
+        activityRule.onNodeWithContentDescription("Voltar").performClick()
+        activityRule.waitForIdle()
+        activityRule.onNodeWithText("Permissões do Android").assertIsDisplayed()
+
+        activityRule.onNodeWithText("Credencial de desbloqueio").performClick()
+        activityRule.waitForIdle()
+        activityRule.onNodeWithTag("detail-back").assertIsDisplayed()
+        activityRule.activity.onBackPressedDispatcher.onBackPressed()
+        activityRule.waitForIdle()
+        activityRule.onNodeWithText("Permissões do Android").assertIsDisplayed()
     }
 
     @Test fun limitIncreaseStillWaitsForAuthenticationBeforeSaving() {

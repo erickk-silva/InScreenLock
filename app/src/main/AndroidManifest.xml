@@ -6,6 +6,8 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
+        <package android:name="com.instagram.android" />
+        <package android:name="com.zhiliaoapp.musically" />
     </queries>
 
     <!-- Android grants this app-op only after the user enables Usage Access in system settings. -->

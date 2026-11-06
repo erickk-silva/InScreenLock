@@ -15,6 +15,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import com.inscreenlock.app.ui.FirstLaunchFlow
+import com.inscreenlock.app.ui.OnboardingScreen
 import org.junit.rules.RuleChain
 import org.junit.Rule
 import org.junit.Test
@@ -56,6 +57,21 @@ class ConsentScreenTest {
         composeRule.onNodeWithText("Seu uso, no seu ritmo").assertIsDisplayed()
         composeRule.activity.runOnUiThread { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
         composeRule.onNodeWithTag("onboarding-start").assertIsDisplayed()
+    }
+
+    @Test
+    fun onboardingWithAnimationsDisabledShowsItsFinalContent() {
+        composeRule.activity.runOnUiThread {
+            composeRule.activity.setContent {
+                com.inscreenlock.app.ui.InScreenLockTheme {
+                    OnboardingScreen(onSkip = {}, onStart = {}, animationsEnabled = false)
+                }
+            }
+        }
+        composeRule.onNodeWithText("Controle seu tempo\nnas redes sociais").assertIsDisplayed()
+        composeRule.onNodeWithTag("onboarding-trust-card").assertIsDisplayed()
+        composeRule.onNodeWithTag("onboarding-start").assertIsDisplayed()
+        composeRule.onNodeWithTag("onboarding-skip").assertIsDisplayed()
     }
 
     @Test

@@ -125,6 +125,7 @@ internal fun UnlockScreen(
         ScreenHeader(
             if (confirmingChange) "Confirme para continuar" else "Desbloquear apps",
             subtitle = if (confirmingChange) "Confirme para autorizar este ajuste." else "O acesso será liberado por até 15 minutos.",
+            onBack = onCancel,
         )
         SurfaceCard(Modifier.fillMaxWidth()) {
             Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -150,8 +151,6 @@ internal fun UnlockScreen(
                     Spacer(Modifier.height(8.dp))
                     PrimaryAction("Desbloquear", { onPinSubmit(pin) { error = it } }, Modifier.fillMaxWidth().testTag("pin-submit"), enabled = pin.length in 4..8)
                 }
-                Spacer(Modifier.height(12.dp))
-                PrimaryAction(if (confirmingChange) "Cancelar" else "Voltar", onCancel, Modifier.fillMaxWidth(), secondary = true)
             }
         }
     }
