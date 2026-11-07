@@ -7,7 +7,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../out'
 const arg = process.argv.find((value) => value.startsWith('--port='));
 const portIndex = process.argv.indexOf('--port');
 const port = Number(arg?.split('=')[1] ?? (portIndex >= 0 ? process.argv[portIndex + 1] : 3100));
-const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.ico': 'image/x-icon', '.json': 'application/json' };
+const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.webp': 'image/webp', '.mp4': 'video/mp4', '.woff2': 'font/woff2', '.ico': 'image/x-icon', '.json': 'application/json' };
 
 createServer((request, response) => {
   let pathname = decodeURIComponent(new URL(request.url ?? '/', 'http://localhost').pathname);

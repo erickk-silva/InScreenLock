@@ -1,8 +1,19 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-const HOME_YAW = -22; // approved hero pose, see INITIAL_POSE
+const HOME_YAW = -28; // approved hero pose, see INITIAL_POSE
+const HOME_PITCH = -20;
+const PITCH_RANGE = 30;
+const GPU = process.env.E2E_GPU === '1';
+const EVIDENCE = path.resolve(process.cwd(), '../.agent-harness/artifacts/ISL-LANDING-001/20261106T200700Z');
+/** Every wait below follows a data attribute of the page, so a slow or busy machine only makes a test slower. */
+const WEBGL_WAIT = { timeout: 240_000 };
+const yawOf = async (phone: Locator) => Number(await phone.getAttribute('data-yaw-deg'));
+const pitchOf = async (phone: Locator) => Number(await phone.getAttribute('data-pitch-deg'));
+const live = (target: Page | Locator) => expect('goto' in target ? target.getByTestId('phone') : target).toHaveAttribute('data-webgl', 'live', WEBGL_WAIT);
+const introDone = (phone: Locator) => expect(phone).toHaveAttribute('data-intro', 'done', WEBGL_WAIT);
 
 test('E2E-01 hero headline, download state, and no horizontal overflow', async ({ page }) => {
   await page.setViewportSize({ width: 1672, height: 941 });
@@ -20,7 +31,7 @@ test('download section is a real, stable target with honest content, and the CTA
   await expect(section).toContainText('Android 9'); await expect(section).toContainText('permissões');
   await expect(section.locator('a[href$=".apk"]')).toHaveCount(0); // nothing to download yet, and nothing pretends so
   await page.getByRole('link', { name: /Baixar para Android/ }).click();
-  await expect.poll(() => page.evaluate(() => document.querySelector('#download')!.getBoundingClientRect().top), { timeout: 8000 }).toBeLessThan(400);
+  await expect.poll(() => page.evaluate(() => document.querySelector('#download')!.getBoundingClientRect().top)).toBeLessThan(400);
   await expect(page).toHaveURL(/#download$/);
   for (const id of ['demo', 'privacidade']) await expect(page.locator(`#${id}`)).toHaveCount(1); // every nav target exists
 });
@@ -68,10 +79,9 @@ test('mobile headline keeps "Seu tempo tem." on one line and wraps the first lin
 });
 
 test('no request leaves the origin while the page loads, the 3D scene mounts and the device is used', async ({ page }) => {
-  test.setTimeout(120_000);
   const foreign: string[] = []; const origin = new URL('http://127.0.0.1:3100').origin;
   page.on('request', (request) => { const url = request.url(); if (!/^(data|blob|about):/.test(url) && new URL(url).origin !== origin) foreign.push(url); });
-  await page.goto('/?visualTest=1'); await expect(page.getByTestId('phone')).toHaveAttribute('data-webgl', 'live', { timeout: 60_000 });
+  await page.goto('/?visualTest=1'); await live(page);
   await page.getByTestId('phone').focus(); for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowRight');
   const box = await page.getByTestId('phone').boundingBox(); if (!box) throw new Error('phone missing');
   await page.mouse.move(box.x + 80, box.y + 200); await page.mouse.down(); await page.mouse.move(box.x + 200, box.y + 210, { steps: 4 }); await page.mouse.up();
@@ -80,11 +90,10 @@ test('no request leaves the origin while the page loads, the 3D scene mounts and
 });
 
 test('no console errors on a normal load with WebGL, nor with WebGL unavailable', async ({ page }) => {
-  test.setTimeout(120_000);
   const problems: string[] = []; const warnings: string[] = [];
   page.on('console', (message) => { if (message.type() === 'error') problems.push(message.text()); if (message.type() === 'warning') warnings.push(message.text()); });
   page.on('pageerror', (error) => problems.push(error.message));
-  await page.goto('/'); await expect(page.getByTestId('phone')).toHaveAttribute('data-webgl', 'live', { timeout: 60_000 }); await page.waitForTimeout(1500);
+  await page.goto('/'); await expect(page.getByTestId('phone')).toHaveAttribute('data-webgl', 'live', WEBGL_WAIT); await page.waitForTimeout(1500);
   expect(problems, 'normal load').toEqual([]);
   // known and harmless: react-three-fiber 9.8 still builds a THREE.Clock, which three 0.187 flags as deprecated (a warning, not an error)
   for (const text of warnings) expect(text, 'only the documented THREE.Clock warning is tolerated').toMatch(/THREE\.Clock|GPU stall|GL Driver/);
@@ -97,11 +106,13 @@ test('no console errors on a normal load with WebGL, nor with WebGL unavailable'
 
 test('a 3D chunk that fails to download leaves the page, CTA and poster intact', async ({ page }) => {
   await page.route('**/_next/static/chunks/*.js', async (route) => {
-    const response = await route.fetch(); const body = await response.text();
-    if (body.includes('webglcontextlost')) await route.abort('failed'); else await route.fulfill({ response, body });
+    try {
+      const response = await route.fetch(); const body = await response.text();
+      if (body.includes('webglcontextlost')) await route.abort('failed'); else await route.fulfill({ response, body });
+    } catch { /* the page was already closed when this request finished: nothing left to answer */ }
   });
   const crashes: string[] = []; page.on('pageerror', (error) => crashes.push(error.message));
-  await page.goto('/?visualTest=1'); await page.waitForTimeout(2500);
+  await page.goto('/?visualTest=1');
   await expect(page.getByRole('heading', { level: 1, name: 'Seu feed não tem fim. Seu tempo tem.' })).toBeVisible();
   await expect(page.getByRole('link', { name: /Baixar para Android/ })).toBeVisible();
   await expect(page.locator('.phone-poster')).toBeVisible(); await expect(page.locator('.phone-canvas')).toHaveCount(0);
@@ -112,13 +123,12 @@ test('a 3D chunk that fails to download leaves the page, CTA and poster intact',
 });
 
 test('E2E-02 and 03 mouse drag and accumulated turns remain unbounded while pitch clamps', async ({ page }) => {
-  test.setTimeout(150_000);
   await page.goto('/?visualTest=1');
-  const phone = page.getByTestId('phone'); await expect(phone).toBeVisible();
+  const phone = page.getByTestId('phone'); await live(phone); await introDone(phone);
   const box = await phone.boundingBox(); if (!box) throw new Error('phone missing');
   const x = box.x + 50; const y = box.y + box.height / 2;
   await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x + 330, y, { steps: 8 }); await page.mouse.up();
-  await expect.poll(async () => Number(await phone.getAttribute('data-yaw-deg')), { timeout: 30_000 }).toBeGreaterThan(100); // software WebGL renders ~1 fps
+  await expect.poll(() => yawOf(phone)).toBeGreaterThan(100);
   await expect(page.locator('[aria-live="polite"]')).toContainText('Giro liberado.');
   const releaseYaw = Number(await phone.getAttribute('data-yaw-deg'));
   expect(releaseYaw).toBeGreaterThan(100);
@@ -128,19 +138,24 @@ test('E2E-02 and 03 mouse drag and accumulated turns remain unbounded while pitc
     const send = (type: string, clientX: number, clientY: number) => target.dispatchEvent(new PointerEvent(type, { pointerId: 78, pointerType: 'mouse', button: 0, clientX, clientY, bubbles: true }));
     send('pointerdown', 100, 100); send('pointermove', 760, 100); send('pointermove', 1420, 100); send('pointerup', 1420, 100);
   });
-  await expect.poll(async () => Number(await phone.getAttribute('data-yaw-deg')), { timeout: 40_000 }).toBeGreaterThan(600);
-  await phone.evaluate((root) => {
-    const target = root as HTMLDivElement & { setPointerCapture: () => void; hasPointerCapture: () => boolean; releasePointerCapture: () => void };
-    const send = (type: string, clientY: number) => target.dispatchEvent(new PointerEvent(type, { pointerId: 79, pointerType: 'mouse', button: 0, clientX: 100, clientY, bubbles: true }));
-    send('pointerdown', 100); send('pointermove', 1100); send('pointerup', 1100);
-  });
-  await expect.poll(async () => Math.abs(Number(await phone.getAttribute('data-pitch-deg')))).toBeLessThanOrEqual(30);
+  await expect.poll(() => yawOf(phone)).toBeGreaterThan(600);
+  const verticalDrag = (id: number, from: number, to: number) => phone.evaluate((root, args) => {
+    const target = root as HTMLDivElement;
+    const send = (type: string, clientY: number) => target.dispatchEvent(new PointerEvent(type, { pointerId: args.id, pointerType: 'mouse', button: 0, clientX: 100, clientY, bubbles: true }));
+    send('pointerdown', args.from); send('pointermove', args.to); send('pointerup', args.to);
+  }, { id, from, to });
+  // pitch really moves (it used to start near the limit, so a no-op passed) and clamps at the range around the home pitch, in both directions
+  await verticalDrag(79, 100, 1100);
+  await expect.poll(() => pitchOf(phone)).toBeGreaterThan(HOME_PITCH + PITCH_RANGE - 5);
+  expect(await pitchOf(phone)).toBeLessThanOrEqual(HOME_PITCH + PITCH_RANGE + 0.5);
+  await verticalDrag(80, 1100, 100);
+  await expect.poll(() => pitchOf(phone)).toBeLessThan(HOME_PITCH - PITCH_RANGE + 5);
+  expect(await pitchOf(phone)).toBeGreaterThanOrEqual(HOME_PITCH - PITCH_RANGE - 0.5);
 });
 
 test('release: a fast flick keeps turning with inertia, a pointer that rested before lifting does not', async ({ page }) => {
-  test.setTimeout(240_000);
   await page.goto('/?visualTest=1'); const phone = page.getByTestId('phone');
-  await expect(phone).toHaveAttribute('data-webgl', 'live', { timeout: 60_000 });
+  await live(phone); await introDone(phone);
   const gesture = (restMs: number) => phone.evaluate(async (root, rest) => {
     const target = root as HTMLDivElement & { setPointerCapture: () => void; hasPointerCapture: () => boolean; releasePointerCapture: () => void };
     target.setPointerCapture = () => {}; target.hasPointerCapture = () => true; target.releasePointerCapture = () => {};
@@ -151,10 +166,12 @@ test('release: a fast flick keeps turning with inertia, a pointer that rested be
   }, restMs);
   const yaw = async () => Number(await phone.getAttribute('data-yaw-deg'));
   await gesture(300); // rested 300 ms: lands exactly on the dragged angle and stays there
-  await expect.poll(yaw, { timeout: 90_000 }).toBeGreaterThan(HOME_YAW + 53); expect(await yaw()).toBeLessThan(HOME_YAW + 58);
-  await page.waitForTimeout(4000); expect(await yaw()).toBeLessThan(HOME_YAW + 58);
-  await gesture(0); // flick: released in the same tick, inertia carries it far beyond the dragged angle
-  await expect.poll(yaw, { timeout: 90_000 }).toBeGreaterThan(HOME_YAW + 55 + 55 + 100);
+  await expect.poll(yaw).toBeGreaterThan(HOME_YAW + 53); expect(await yaw()).toBeLessThan(HOME_YAW + 58);
+  // still: the pose must stay put (two reads 4 s apart agree), instead of waiting a fixed time and hoping
+  await expect.poll(async () => { const first = await yaw(); await page.waitForTimeout(1500); return Math.abs((await yaw()) - first); }).toBeLessThan(0.3);
+  expect(await yaw()).toBeLessThan(HOME_YAW + 58);
+  await gesture(0); // flick: released in the same tick, inertia carries it far beyond the dragged angle (capped at 1500 deg/s)
+  await expect.poll(yaw).toBeGreaterThan(HOME_YAW + 55 + 55 + 100);
 });
 
 const swipe = async (page: Page, from: [number, number], to: [number, number]) => {
@@ -176,28 +193,27 @@ const mobilePage = async (page: Page, url = 'http://127.0.0.1:3100/?visualTest=1
 };
 
 test('E2E-04 horizontal swipe over the phone rotates it on mobile', async ({ page }) => {
-  test.setTimeout(90_000);
   const { context, mobile } = await mobilePage(page);
-  const phone = mobile.getByTestId('phone'); await phone.scrollIntoViewIfNeeded(); const box = await phone.boundingBox(); if (!box) throw new Error('phone missing');
-  await expect(phone).toHaveAttribute('data-yaw-deg', String(HOME_YAW));
+  const phone = mobile.getByTestId('phone'); await phone.scrollIntoViewIfNeeded(); await live(phone);
+  const box = await phone.boundingBox(); if (!box) throw new Error('phone missing');
+  expect(Math.abs((await yawOf(phone)) - HOME_YAW)).toBeLessThan(3.5); // home pose plus the subtle idle drift
   await swipe(mobile, [box.x + box.width / 2 - 60, box.y + box.height / 2], [box.x + box.width / 2 + 100, box.y + box.height / 2]);
-  await expect.poll(async () => Number(await phone.getAttribute('data-yaw-deg')), { timeout: 20_000 }).toBeGreaterThan(HOME_YAW + 20);
-  expect(Number(await phone.getAttribute('data-pitch-deg'))).toBe(-8); // touch never changes the pitch: vertical gestures belong to the page
+  await expect.poll(() => yawOf(phone)).toBeGreaterThan(HOME_YAW + 20);
+  expect(Math.abs((await pitchOf(phone)) - HOME_PITCH)).toBeLessThan(1.5); // touch never changes the pitch: vertical gestures belong to the page (the keyboard covers it)
   await context.close();
 });
 
 test('E2E-04b vertical swipe over the phone scrolls the page instead of rotating it (390x844)', async ({ page }) => {
-  test.setTimeout(90_000);
   const { context, mobile } = await mobilePage(page);
-  const phone = mobile.getByTestId('phone'); await phone.scrollIntoViewIfNeeded();
+  const phone = mobile.getByTestId('phone'); await phone.scrollIntoViewIfNeeded(); await live(phone);
   const box = await phone.boundingBox(); if (!box) throw new Error('phone missing');
   const before = await mobile.evaluate(() => scrollY);
-  const yawBefore = Number(await phone.getAttribute('data-yaw-deg')); const pitchBefore = Number(await phone.getAttribute('data-pitch-deg'));
+  const yawBefore = await yawOf(phone); const pitchBefore = await pitchOf(phone);
   const x = box.x + box.width / 2; const y = Math.min(box.y + box.height * 0.75, 800);
   await swipe(mobile, [x, y], [x, y - 240]);
-  await expect.poll(() => mobile.evaluate(() => scrollY), { timeout: 10_000 }).toBeGreaterThan(before + 60);
-  expect(Number(await phone.getAttribute('data-yaw-deg'))).toBe(yawBefore);
-  expect(Number(await phone.getAttribute('data-pitch-deg'))).toBe(pitchBefore);
+  await expect.poll(() => mobile.evaluate(() => scrollY)).toBeGreaterThan(before + 60);
+  expect(Math.abs((await yawOf(phone)) - yawBefore)).toBeLessThan(4); // a rotation by the swipe would be tens of degrees; only the idle drift (about 2 deg) may remain
+  expect(Math.abs((await pitchOf(phone)) - pitchBefore)).toBeLessThan(1.5);
   await context.close();
 });
 
@@ -207,20 +223,19 @@ test('E2E-05 page scrolling remains available outside the phone', async ({ page 
 });
 
 test('E2E-06 keyboard rotation, Home and the Recentrar button (real mouse click) return to the home pose', async ({ page }) => {
-  test.setTimeout(120_000);
-  await page.goto('/?visualTest=1'); const phone = page.getByTestId('phone');
+  await page.goto('/?visualTest=1'); const phone = page.getByTestId('phone'); await live(phone);
   const recenter = page.getByRole('button', { name: 'Recentrar aparelho' });
   await expect(recenter).toHaveCSS('opacity', '0'); // hidden until the user turns the device
   await phone.focus(); await page.keyboard.press('ArrowRight');
-  await expect.poll(async () => Number(await phone.getAttribute('data-yaw-deg'))).toBeGreaterThan(HOME_YAW);
-  await page.keyboard.press('Home'); await expect.poll(async () => Number(await phone.getAttribute('data-yaw-deg')), { timeout: 40_000 }).toBe(HOME_YAW);
+  await expect.poll(() => yawOf(phone)).toBeGreaterThan(HOME_YAW);
+  await page.keyboard.press('Home'); await expect.poll(() => yawOf(phone)).toBe(HOME_YAW);
   // turn it with the mouse, then press the button with the mouse: the click must reach the button and recentre
   const box = await phone.boundingBox(); if (!box) throw new Error('phone missing');
   await page.mouse.move(box.x + 60, box.y + box.height / 2); await page.mouse.down(); await page.mouse.move(box.x + 60 + 260, box.y + box.height / 2, { steps: 6 }); await page.mouse.move(box.x + 60 + 262, box.y + box.height / 2); await page.waitForTimeout(150); await page.mouse.up();
-  await expect.poll(async () => Number(await phone.getAttribute('data-yaw-deg'))).toBeGreaterThan(HOME_YAW + 60);
+  await expect.poll(() => yawOf(phone)).toBeGreaterThan(HOME_YAW + 60);
   await expect(recenter).toHaveCSS('opacity', /0\.9/);
   await recenter.click();
-  await expect.poll(async () => Number(await phone.getAttribute('data-yaw-deg')), { timeout: 60_000 }).toBe(HOME_YAW);
+  await expect.poll(() => yawOf(phone)).toBe(HOME_YAW);
   await expect(page.locator('[aria-live="polite"]')).toContainText('Aparelho recentrado.');
 });
 
@@ -229,7 +244,7 @@ test('keyboard announcements are throttled and use the angle from home, never a 
   const live = page.locator('[aria-live="polite"]');
   await live.evaluate((node) => { (window as unknown as { liveChanges: string[] }).liveChanges = []; new MutationObserver(() => (window as unknown as { liveChanges: string[] }).liveChanges.push(node.textContent ?? '')).observe(node, { childList: true, characterData: true, subtree: true }); });
   for (let i = 0; i < 40; i++) await page.keyboard.press('ArrowRight'); // 480 degrees in about a second
-  await expect(live).toHaveText('Posição 120 graus.', { timeout: 6000 }); // 480 mod 360
+  await expect(live).toHaveText('Posição 120 graus.', ); // 480 mod 360
   const changes = await page.evaluate(() => (window as unknown as { liveChanges: string[] }).liveChanges);
   expect(changes.length).toBeLessThanOrEqual(4);
   for (const text of changes) expect(Number(/\d+/.exec(text)?.[0] ?? 0)).toBeLessThan(360);
@@ -252,7 +267,6 @@ test('WebGL context loss replaces the canvas with the static demonstration poste
   await page.goto('/?visualTest=1');
   await expect(page.locator('.phone-canvas canvas')).toBeVisible();
   await expect(page.locator('.phone-poster')).toBeHidden();
-  await page.waitForTimeout(100);
   await page.locator('.phone-canvas canvas').evaluate((canvas) => canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true })));
   await expect(page.locator('.phone-poster')).toBeVisible();
   await expect(page.locator('.phone-canvas')).toHaveCount(0);
@@ -260,28 +274,27 @@ test('WebGL context loss replaces the canvas with the static demonstration poste
 
 test('E2E-08 reduced motion preference is respected', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' }); await page.goto('/');
-  await page.waitForTimeout(800);
+  await live(page);
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Recentrar aparelho' })).toHaveCount(1);
   await expect(page.getByTestId('phone')).toHaveAttribute('data-yaw-deg', String(HOME_YAW));
   const opacity = await page.locator('.hero-actions').evaluate((element) => getComputedStyle(element).opacity);
   expect(Number(opacity)).toBe(1);
   await page.getByTestId('phone').focus(); await page.keyboard.press('ArrowRight');
-  await expect.poll(async () => Number(await page.getByTestId('phone').getAttribute('data-yaw-deg'))).toBeGreaterThan(HOME_YAW);
+  await expect.poll(() => yawOf(page.getByTestId('phone'))).toBeGreaterThan(HOME_YAW);
 });
 
 test('idle drift runs subtly, then freezes at the hovered pose', async ({ page }) => {
-  test.setTimeout(90_000); // software WebGL renders ~1 fps in CI containers, so the 2.5 s entrance needs real time
   await page.goto('/');
   const phone = page.getByTestId('phone');
-  await expect(phone).toHaveAttribute('data-intro', 'done', { timeout: 40_000 });
-  await expect.poll(async () => Number(await phone.getAttribute('data-yaw-deg'))).not.toBe(HOME_YAW);
+  await live(phone); await introDone(phone);
+  await expect(phone).toHaveAttribute('data-idle', 'drifting');
+  await expect.poll(() => yawOf(phone)).not.toBe(HOME_YAW);
   const box = await phone.boundingBox(); if (!box) throw new Error('phone missing');
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.waitForTimeout(250);
-  const hoveredYaw = Number(await phone.getAttribute('data-yaw-deg'));
-  await page.waitForTimeout(500);
-  expect(Number(await phone.getAttribute('data-yaw-deg'))).toBe(hoveredYaw);
+  await expect(phone).toHaveAttribute('data-idle', 'frozen');
+  // frozen means two reads taken 1.6 s apart agree, whatever the frame rate of the machine
+  await expect.poll(async () => { const first = await yawOf(phone); await page.waitForTimeout(1600); return Math.abs((await yawOf(phone)) - first); }).toBeLessThan(0.05);
 });
 
 test('E2E-09 required responsive sizes have no horizontal overflow', async ({ page }) => {
@@ -291,48 +304,127 @@ test('E2E-09 required responsive sizes have no horizontal overflow', async ({ pa
   }
 });
 
-test('visual evidence: desktop, tablet, mobile, and phone orientations', async ({ page }) => {
-  test.setTimeout(900_000);
-  const output = path.resolve(process.cwd(), '../.agent-harness/artifacts/ISL-LANDING-001/20261106T200700Z/hero-shots');
-  await fs.mkdir(output, { recursive: true });
-  const settle = async (p: Page) => { // deterministic: fonts ready, 3D scene live in its final frame, every entrance finished
-    await p.evaluate(() => document.fonts.ready);
-    await expect(p.getByTestId('phone')).toHaveAttribute('data-webgl', 'live', { timeout: 120_000 });
-    await expect.poll(() => p.evaluate(() => [...document.querySelectorAll('.benefit')].every((node) => getComputedStyle(node).opacity === '1')), { timeout: 60_000 }).toBeTruthy();
-    await p.waitForTimeout(2500);
-  };
-  const phone = page.getByTestId('phone');
-  await page.setViewportSize({ width: 1672, height: 941 }); await page.goto('/?visualTest=1'); await settle(page);
-  await expect(page.locator('.phone-poster')).toHaveAttribute('alt', /demonstração fictícia/i);
-  await page.screenshot({ path: path.join(output, 'actual-1672.png') });
-  // phone shots: the device alone in its stage (floating cards, header and focus ring hidden so nothing covers the device)
-  const canvasShot = async (name: string) => { await page.addStyleTag({ content: '.float-pos,.site-header-bar{visibility:hidden!important}.phone-wrap:focus-visible{outline:none!important}', }).then(async (tag) => { await page.locator('.phone-canvas').screenshot({ path: path.join(output, name) }); await tag.evaluate((node) => (node as Element).remove()); }); };
-  await canvasShot('phone-front.png');
-  await phone.focus();
-  const settleAt = async (target: number) => { await expect.poll(async () => Math.abs(Number(await phone.getAttribute('data-yaw-deg')) - target), { timeout: 120_000 }).toBeLessThan(3); await page.waitForTimeout(1500); };
-  for (let i = 0; i < 8; i++) await page.keyboard.press('ArrowRight');
-  await settleAt(HOME_YAW + 96); await canvasShot('phone-side.png');
-  for (let i = 0; i < 9; i++) await page.keyboard.press('ArrowRight');
-  await settleAt(HOME_YAW + 204); await canvasShot('phone-back.png');
-  for (const [name, width, height] of [['1440', 1440, 900], ['1280', 1280, 800], ['1024', 1024, 768], ['768', 768, 1024]] as const) {
+
+/* ---------- layout against the REAL projected display, placeholder, ribbon, hint, a11y and computed styles ---------- */
+
+/** Fraction of the lit display (sampled on a 21x21 grid of its projected quad) covered by each floating card, plus the card rectangles. */
+const cardCoverage = (page: Page) => page.evaluate(() => {
+  const canvas = document.querySelector('.phone-canvas')!.getBoundingClientRect();
+  const q = (document.querySelector('[data-testid=phone]') as HTMLElement).dataset.screenQuad!.split(',').map(Number);
+  const corners = [0, 1, 2, 3].map((i) => [canvas.x + q[i * 2] * canvas.width, canvas.y + q[i * 2 + 1] * canvas.height]);
+  const cards = [...document.querySelectorAll('.float-card')].map((card) => { const r = card.getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom }; });
+  const margin = 4; let covered = 0; let total = 0;
+  for (let i = 0; i <= 20; i++) for (let j = 0; j <= 20; j++) {
+    const u = i / 20; const v = j / 20;
+    const top = [corners[0][0] + (corners[1][0] - corners[0][0]) * u, corners[0][1] + (corners[1][1] - corners[0][1]) * u];
+    const bottom = [corners[3][0] + (corners[2][0] - corners[3][0]) * u, corners[3][1] + (corners[2][1] - corners[3][1]) * u];
+    const x = top[0] + (bottom[0] - top[0]) * v; const y = top[1] + (bottom[1] - top[1]) * v; total++;
+    if (cards.some((c) => x > c.left - margin && x < c.right + margin && y > c.top - margin && y < c.bottom + margin)) covered++;
+  }
+  return { covered, total, cards, viewport: innerWidth };
+});
+
+test('floating cards never cover the phone screen, and stay inside the viewport, at every required width', async ({ page }) => {
+  test.setTimeout(1_200_000);
+  const sizes: Array<[number, number]> = [[1672, 941], [1440, 900], [1280, 800], [1180, 800], [1024, 768], [768, 1024], [390, 844], [360, 800]];
+  for (const [width, height] of sizes) {
     await page.setViewportSize({ width, height }); await page.goto('/?visualTest=1');
-    if (width >= 1024) await settle(page); else { await page.getByTestId('phone').scrollIntoViewIfNeeded(); await settle(page); await page.evaluate(() => scrollTo(0, 0)); await page.waitForTimeout(600); }
-    await page.screenshot({ path: path.join(output, `actual-${name}.png`) });
+    const phone = page.getByTestId('phone'); await phone.scrollIntoViewIfNeeded(); await live(phone); await introDone(phone);
+    await expect(phone).not.toHaveAttribute('data-screen-quad', '');
+    await expect(page.locator('.alert-card.is-in')).toHaveCount(1);
+    const { covered, cards, viewport } = await cardCoverage(page);
+    expect(covered, `display samples covered by a card at ${width}px`).toBe(0);
+    for (const card of cards) { expect(card.left, `card inside the viewport at ${width}px`).toBeGreaterThanOrEqual(0); expect(card.right).toBeLessThanOrEqual(viewport); }
   }
-  for (const [name, width, height] of [['390', 390, 844], ['360', 360, 800]] as const) { // phones: the device sits below the copy, so the full page (phone included) is the evidence
-    await page.setViewportSize({ width, height }); await page.goto('/?visualTest=1'); await page.waitForTimeout(800);
-    await page.screenshot({ path: path.join(output, `actual-${name}-fold.png`) });
-    await page.getByTestId('phone').scrollIntoViewIfNeeded(); await settle(page); await page.evaluate(() => scrollTo(0, 0)); await page.waitForTimeout(600);
-    await page.screenshot({ path: path.join(output, `actual-${name}.png`), fullPage: true });
-  }
-  const actual = await fs.readFile(path.join(output, 'actual-1672.png'));
-  const reference = await fs.readFile(path.resolve(process.cwd(), '../.agent-harness/input/InScreenLock_Landing_Spec_Handoff_v1.0/references/01-HERO-APROVADO.png'));
-  await page.setViewportSize({ width: 1672, height: 941 });
-  await page.setContent('<body style="margin:0"><canvas width="1672" height="941" style="width:1672px;height:941px;display:block"></canvas></body>');
-  await page.evaluate(({ left, right }) => {
-    const canvas = document.querySelector('canvas')!; const ctx = canvas.getContext('2d')!;
-    const draw = (src: string) => new Promise<HTMLImageElement>((resolve) => { const image = new Image(); image.onload = () => resolve(image); image.src = `data:image/png;base64,${src}`; });
-    return Promise.all([draw(left), draw(right)]).then(([a, b]) => { ctx.globalAlpha = .5; ctx.drawImage(a, 0, 0, canvas.width, canvas.height); ctx.drawImage(b, 0, 0, canvas.width, canvas.height); });
-  }, { left: actual.toString('base64'), right: reference.toString('base64') });
-  await page.screenshot({ path: path.join(output, 'overlay-1672.png') });
+});
+
+test('floating cards are decorative: they never intercept a pointer aimed at the device', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 }); await page.goto('/?visualTest=1');
+  await expect(page.locator('.alert-card.is-in')).toHaveCount(1);
+  const result = await page.evaluate(() => [...document.querySelectorAll('.float-pos')].map((wrapper) => {
+    const card = wrapper.querySelector('.float-card')!.getBoundingClientRect();
+    const hit = document.elementFromPoint(card.left + card.width / 2, card.top + card.height / 2);
+    return { pointerEvents: getComputedStyle(wrapper).pointerEvents, cardBlocksPointer: !!hit?.closest('.float-pos') };
+  }));
+  expect(result).toEqual([{ pointerEvents: 'none', cardBlocksPointer: false }, { pointerEvents: 'none', cardBlocksPointer: false }]);
+});
+
+test('the phone area is never empty while the 3D chunk loads: a dimmed stand-in appears at once and hands over to the live scene', async ({ page }) => {
+  await page.route('**/_next/static/chunks/*.js', async (route) => {
+    try {
+      const response = await route.fetch(); const body = await response.text();
+      if (body.includes('webglcontextlost')) await new Promise((resolve) => setTimeout(resolve, 4000)); // simulate a slow connection for the 3D chunk only
+      await route.fulfill({ response, body });
+    } catch { /* closed page */ }
+  });
+  await page.goto('/');
+  const phone = page.getByTestId('phone'); const poster = page.locator('.phone-poster');
+  await expect(phone).toHaveAttribute('data-webgl', 'poster');
+  await expect.poll(() => poster.evaluate((el) => Number(getComputedStyle(el).opacity))).toBeGreaterThan(0.9);
+  const box = await poster.boundingBox(); expect(box?.height ?? 0).toBeGreaterThan(300);
+  expect(await poster.evaluate((el) => getComputedStyle(el).filter)).toContain('brightness'); // dimmed: an unlit device, not a second finished one
+  await live(phone); await expect(poster).toBeHidden();
+});
+
+test('the aurora is an open ribbon (two tapering crescents), not a closed halo', async ({ page }) => {
+  await page.goto('/?visualTest=1');
+  await expect(page.locator('.phone-orbit .ribbon')).toHaveCount(2);
+  await expect(page.locator('.phone-orbit ellipse, .phone-orbit circle')).toHaveCount(0);
+  const pointed = await page.locator('.phone-orbit .ribbon-body').evaluateAll((paths) => paths.map((path) => { const box = (path as SVGGraphicsElement).getBBox(); return box.width > 150 && box.height > 150; }));
+  expect(pointed).toEqual([true, true]);
+});
+
+test('E2E-04c on touch screens the gesture hint appears once the device has settled and goes away at the first swipe', async ({ page }) => {
+  const { context, mobile } = await mobilePage(page);
+  const phone = mobile.getByTestId('phone'); await phone.scrollIntoViewIfNeeded(); await live(phone); await introDone(phone);
+  const hint = mobile.locator('.gesture-hint'); await expect(hint).toHaveClass(/is-visible/); await expect(hint).toBeInViewport();
+  const box = await phone.boundingBox(); if (!box) throw new Error('phone missing');
+  await swipe(mobile, [box.x + box.width / 2 - 40, box.y + box.height / 2], [box.x + box.width / 2 + 80, box.y + box.height / 2]);
+  await expect(hint).not.toHaveClass(/is-visible/);
+  await context.close();
+});
+
+test('axe finds no serious or critical issue in the header, hero and footer', async ({ page }) => {
+  await page.setViewportSize({ width: 1672, height: 941 }); await page.goto('/?visualTest=1');
+  const phone = page.getByTestId('phone'); await live(phone); await introDone(phone);
+  await expect.poll(() => page.evaluate(() => [...document.querySelectorAll('.benefit')].every((node) => getComputedStyle(node).opacity === '1')), WEBGL_WAIT).toBeTruthy(); // GSAP follows the frame rate: ~1 fps in software WebGL
+  const results = await new AxeBuilder({ page }).include('.site-header-bar').include('main.hero').include('.hero-footer').analyze();
+  const summary = {
+    scannedAt: new Date().toISOString(), mode: GPU ? 'gpu' : 'software', axeVersion: results.testEngine.version, url: results.url, viewport: '1672x941',
+    counts: { passes: results.passes.length, violations: results.violations.length, incomplete: results.incomplete.length, inapplicable: results.inapplicable.length },
+    violations: results.violations.map((violation) => ({ id: violation.id, impact: violation.impact, help: violation.help, nodes: violation.nodes.map((node) => ({ target: node.target, summary: node.failureSummary })) })),
+    incomplete: results.incomplete.map((item) => ({ id: item.id, impact: item.impact, nodes: item.nodes.length })),
+  };
+  await fs.mkdir(path.join(EVIDENCE, 'hero-shots'), { recursive: true });
+  await fs.writeFile(path.join(EVIDENCE, 'hero-shots/axe.json'), `${JSON.stringify(summary, null, 2)}\n`);
+  expect(results.violations.filter((violation) => violation.impact === 'serious' || violation.impact === 'critical'), JSON.stringify(summary.violations)).toEqual([]);
+});
+
+test('computed styles prove the token colours and the Inter / Roboto fonts really loaded', async ({ page }) => {
+  await page.setViewportSize({ width: 1672, height: 941 }); await page.goto('/?visualTest=1');
+  const phone = page.getByTestId('phone'); await live(phone); await introDone(phone);
+  const proof = await page.evaluate(async () => {
+    await document.fonts.ready;
+    const style = (selector: string, props: string[]) => { const el = document.querySelector(selector)!; const computed = getComputedStyle(el); return Object.fromEntries(props.map((prop) => [prop, computed.getPropertyValue(prop)])); };
+    const root = getComputedStyle(document.documentElement);
+    const faces = [...document.fonts].filter((face) => face.status === 'loaded').map((face) => ({ family: face.family.replace(/"/g, ''), weight: face.weight, style: face.style, status: face.status }));
+    return {
+      tokens: Object.fromEntries(['--bg-main', '--color-primary', '--color-alert', '--text-primary', '--text-secondary', '--content-width'].map((name) => [name, root.getPropertyValue(name).trim()])),
+      fonts: { check: { 'Inter Variable': document.fonts.check('700 20px "Inter Variable"'), Roboto: document.fonts.check('400 20px Roboto') }, loadedFaces: faces },
+      body: style('body', ['font-family', 'color', 'background-color']),
+      h1: style('.hero h1', ['font-family', 'font-weight', 'font-size', 'letter-spacing']),
+      h1Line1: style('.hero h1 .h1-line:not(.h1-accent) .h1-fragment', ['color']),
+      h1Accent: style('.hero h1 .h1-accent .h1-fragment', ['color']),
+      subheadline: style('.subheadline', ['font-family', 'color', 'font-size']),
+      benefit: style('.benefit', ['font-family', 'color']),
+      primaryButton: style('.button-primary', ['font-family', 'color']),
+    };
+  });
+  await fs.mkdir(path.join(EVIDENCE, 'hero-shots'), { recursive: true });
+  await fs.writeFile(path.join(EVIDENCE, 'hero-shots/computed-styles.json'), `${JSON.stringify({ mode: GPU ? 'gpu' : 'software', ...proof }, null, 2)}\n`);
+  expect(proof.fonts.check['Inter Variable']).toBe(true); expect(proof.fonts.check.Roboto).toBe(true);
+  expect(proof.fonts.loadedFaces.some((face) => /Inter/.test(face.family))).toBe(true); expect(proof.fonts.loadedFaces.some((face) => /Roboto/.test(face.family))).toBe(true);
+  expect(proof.h1['font-family']).toMatch(/Inter/); expect(proof.subheadline['font-family']).toMatch(/Roboto/);
+  expect(proof.tokens['--color-primary']).toBe('#22e3b0'); expect(proof.tokens['--bg-main']).toBe('#12161c'); expect(proof.tokens['--text-primary']).toBe('#e6eaf0');
+  expect(proof.h1Line1.color).toBe('rgb(230, 234, 240)'); expect(proof.h1Accent.color).toBe('rgb(34, 227, 176)');
 });

@@ -1,16 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applyDrag, clampPitch, dampAngle, easeOutCubic, FINAL_FRAME, GOAL_MINUTES, idleOffsets, IDLE, INITIAL_POSE, INTRO, LEAN_DEG,
+  applyDrag, clampPitch, dampAngle, easeOutCubic, FINAL_FRAME, GOAL_MINUTES, idleOffsets, IDLE, INITIAL_POSE, INTRO, MAX_FLICK_DEG_PER_S, PITCH_RANGE, capFlick,
   LIMIT_CROSS_MS, degreesFromHome, nearestEquivalentYaw, settleVelocity, STILL_RELEASE_MS, releaseVelocity, ringTimeline, springSettled, stepSpring, TOTAL_MINUTES, type Spring,
 } from '@/lib/phone-motion';
 
 describe('phone rotation math', () => {
-  it('keeps the approved pose as the initial orientation', () => expect(INITIAL_POSE).toEqual({ yaw: -22, pitch: -8, roll: 0 }));
-  it('leans the device to the right, like the approved reference', () => expect(LEAN_DEG).toBeGreaterThan(8));
+  it('keeps the pose fitted to the approved reference as the initial orientation', () => expect(INITIAL_POSE).toEqual({ yaw: -28, pitch: -20, roll: -10.8 }));
+  it('leans the device in the view plane with a real roll (top toward the right), never a shear', () => { expect(INITIAL_POSE.roll).toBeLessThan(-8); expect(Object.keys(INITIAL_POSE).sort()).toEqual(['pitch', 'roll', 'yaw']); });
+  it('caps the speed a flick can give the device, so a very fast gesture cannot spin it for many turns', () => {
+    expect(capFlick(2900)).toBe(MAX_FLICK_DEG_PER_S); expect(capFlick(-9000)).toBe(-MAX_FLICK_DEG_PER_S); expect(capFlick(420)).toBe(420);
+  });
   it('allows continuous yaw over multiple rotations', () => expect(applyDrag(359, 0, 1000, 0).yaw).toBeGreaterThan(719));
   it('clamps only pitch at both ends', () => {
-    expect(clampPitch(90)).toBe(30); expect(clampPitch(-90)).toBe(-30);
-    expect(applyDrag(400, 25, 20, 100).yaw).toBe(411);
+    expect(clampPitch(90)).toBe(INITIAL_POSE.pitch + PITCH_RANGE); expect(clampPitch(-90)).toBe(INITIAL_POSE.pitch - PITCH_RANGE);
+    expect(applyDrag(400, 0, 20, 100).yaw).toBe(411);
   });
   it('damps toward target while retaining user pose on release', () => {
     expect(dampAngle(0, 100, .02)).toBeGreaterThan(0);

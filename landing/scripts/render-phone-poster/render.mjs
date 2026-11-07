@@ -1,35 +1,50 @@
-// Renders the static WebGL-fallback poster from the SAME drawing code that feeds the live phone texture.
-// Usage: npm run render-phone-poster
+// Renders the static WebGL-fallback poster from the live 3D scene itself, so the poster and the model can never drift apart.
+// Usage: npm run build && npm run render-phone-poster      (env: BASE=<url of a running site>, E2E_GPU=1 for the hardware GPU)
+// The scene is opened in its settled state (?visualTest=1: final pose, final screen, no idle) and the canvas pixels, with their alpha, are saved as WebP.
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { createRequire } from 'node:module';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../..');
-const require = createRequire(import.meta.url);
-const ts = require('typescript');
+const gpu = process.env.E2E_GPU === '1';
+const port = 3110;
+let server = null;
+let base = process.env.BASE;
+if (!base) {
+  server = spawn('node', [path.join(root, 'scripts/serve-export.mjs'), '--port', String(port)], { stdio: 'ignore' });
+  base = `http://127.0.0.1:${port}`;
+  await new Promise((resolve) => setTimeout(resolve, 800));
+}
 
-const transpile = async (file) => ts.transpileModule(await fs.readFile(path.join(root, 'src/lib', file), 'utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-const motion = await transpile('phone-motion.ts');
-const screen = (await transpile('phone-screen.ts')).replace(/from '\.\/phone-motion'/, 'from "data:text/javascript;base64,' + Buffer.from(motion).toString('base64') + '"');
-const font = (await fs.readFile(path.join(root, 'node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2'))).toString('base64');
-
-const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_PATH ?? '/usr/bin/google-chrome', args: ['--no-sandbox'] });
-const page = await browser.newPage();
-await page.setContent(`<style>@font-face{font-family:"Inter Variable";font-weight:100 900;src:url(data:font/woff2;base64,${font}) format("woff2")}</style><canvas id="c" width="788" height="1584"></canvas>`);
-await page.evaluate(async () => { await Promise.all([300, 400, 500, 600, 700, 800].map((w) => document.fonts.load(`italic ${w} 20px "Inter Variable"`))); await document.fonts.ready; });
-const dataUrl = await page.evaluate(async (source) => {
-  const mod = await import(`data:text/javascript;base64,${btoa(unescape(encodeURIComponent(source)))}`);
-  const canvas = document.getElementById('c'); const ctx = canvas.getContext('2d');
-  mod.drawPhoneScreen(ctx, canvas.width, canvas.height);
-  return canvas.toDataURL('image/webp', 0.9);
-}, screen);
-await browser.close();
-
-const webp = Buffer.from(dataUrl.split(',')[1], 'base64');
-await fs.writeFile(path.join(root, 'public/app-screens/dashboard-demo.webp'), webp);
-const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 760"><defs><linearGradient id="body" x2="1" y2="1"><stop stop-color="#8d98a3"/><stop offset=".16" stop-color="#252d35"/><stop offset=".8" stop-color="#0c1116"/><stop offset="1" stop-color="#7d8a96"/></linearGradient><clipPath id="screen"><rect x="91.5" y="61" width="317" height="638" rx="36"/></clipPath><filter id="glow"><feGaussianBlur stdDeviation="14"/></filter></defs><ellipse cx="240" cy="722" rx="190" ry="26" fill="#22e3b0" opacity=".45" filter="url(#glow)"/><g transform="translate(250 380) skewX(-12) translate(-250 -380)"><rect x="77.5" y="35" width="345" height="690" rx="54" fill="url(#body)" stroke="#9aa6b1" stroke-width="2.5"/><rect x="85" y="43" width="330" height="674" rx="47" fill="#05080c"/><image href="data:image/webp;base64,${webp.toString('base64')}" x="91.5" y="61" width="317" height="638" preserveAspectRatio="xMidYMid slice" clip-path="url(#screen)"/><circle cx="250" cy="75" r="6" fill="#010203" stroke="#2a323a" stroke-width="2"/></g></svg>\n`;
-await fs.writeFile(path.join(root, 'public/app-screens/phone-poster.svg'), svg);
-console.log(`poster written: ${webp.length} bytes webp`);
+const browser = await chromium.launch(gpu
+  ? { headless: false, executablePath: process.env.CHROME_PATH ?? '/usr/bin/google-chrome', env: { ...process.env, GALLIUM_DRIVER: 'd3d12' } }
+  : { headless: true, executablePath: process.env.CHROME_PATH ?? '/usr/bin/google-chrome', args: ['--no-sandbox'] });
+try {
+  const context = await browser.newContext({ viewport: { width: 1672, height: 941 }, deviceScaleFactor: 1.5, reducedMotion: 'no-preference' });
+  const page = await context.newPage();
+  // keep the drawing buffer readable so the finished frame can be exported with its transparency
+  await page.addInitScript(() => {
+    const original = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type, attributes) {
+      if (String(type).includes('webgl')) return original.call(this, type, { ...(attributes ?? {}), preserveDrawingBuffer: true });
+      return original.call(this, type, attributes);
+    };
+  });
+  await page.goto(`${base}/?visualTest=1`);
+  await page.evaluate(() => document.fonts.ready);
+  await page.waitForSelector('[data-webgl="live"]', { timeout: 120_000 });
+  await page.waitForTimeout(2500);
+  const { dataUrl, width, height } = await page.evaluate(() => {
+    const canvas = document.querySelector('.phone-canvas canvas');
+    return { dataUrl: canvas.toDataURL('image/webp', 0.92), width: canvas.width, height: canvas.height };
+  });
+  const webp = Buffer.from(dataUrl.split(',')[1], 'base64');
+  await fs.writeFile(path.join(root, 'public/app-screens/phone-poster.webp'), webp);
+  console.log(`poster written: ${width}x${height}, ${webp.length} bytes`);
+} finally {
+  await browser.close();
+  server?.kill();
+}

@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 
 /** Physical size of the device in scene units (about 1 unit = 3.2 cm, so 2.3 x 5.0 is a 6.7" phone). */
-export const PHONE = { width: 2.5, height: 5.0, thickness: 0.22, corner: 0.34, bevel: 0.045 } as const;
+export const PHONE = { width: 2.5, height: 5.0, thickness: 0.3, corner: 0.42, bevel: 0.07 } as const;
 /** Front glass, display and punch hole, all measured from the centre of the device. */
-export const GLASS = { width: 2.37, height: 4.78, corner: 0.27 } as const;
-export const DISPLAY = { width: 2.3, height: 4.62, corner: 0.235, y: 0.005 } as const;
+export const GLASS = { width: 2.4, height: 4.88, corner: 0.36 } as const;
+export const DISPLAY = { width: 2.35, height: 4.8, corner: 0.33, y: 0.002 } as const;
 const FRONT_Z = PHONE.thickness / 2;
 
 export const roundedRectShape = (width: number, height: number, radius: number) => {

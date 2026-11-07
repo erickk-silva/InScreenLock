@@ -26,8 +26,8 @@ function roundRect(ctx: Ctx, x: number, y: number, w: number, h: number, r: numb
   ctx.closePath();
 }
 
-function text(ctx: Ctx, value: string, x: number, y: number, size: number, weight: number, color: string, align: CanvasTextAlign = 'left', italic = false) {
-  ctx.font = `${italic ? 'italic ' : ''}${weight} ${size}px ${FONT}`;
+function text(ctx: Ctx, value: string, x: number, y: number, size: number, weight: number, color: string, align: CanvasTextAlign = 'left') {
+  ctx.font = `${weight} ${size}px ${FONT}`;
   ctx.fillStyle = color;
   ctx.textAlign = align;
   ctx.textBaseline = 'middle';
@@ -50,33 +50,35 @@ function calendarIcon(ctx: Ctx, cx: number, cy: number, size: number, color: str
 }
 
 function drawStatusBar(ctx: Ctx) {
-  text(ctx, '01:07', 38, 58, 16, 700, '#f2f5f8');
+  text(ctx, '01:07', 38, 50, 22, 700, '#f2f5f8');
   // signal, wifi and battery drawn as simple solid glyphs, as in the app status bar
   ctx.fillStyle = '#f2f5f8';
-  ctx.beginPath(); ctx.moveTo(384, 60); ctx.lineTo(406, 60); ctx.lineTo(395, 49); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(410, 60); ctx.lineTo(423, 60); ctx.lineTo(423, 47); ctx.closePath(); ctx.fill();
-  roundRect(ctx, 431, 47, 11, 16, 3); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(376, 58); ctx.lineTo(402, 58); ctx.lineTo(389, 44); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(407, 58); ctx.lineTo(423, 58); ctx.lineTo(423, 42); ctx.closePath(); ctx.fill();
+  roundRect(ctx, 430, 42, 13, 19, 3.5); ctx.fill();
 }
 
 function drawBrand(ctx: Ctx) {
-  strokeIcon(ctx, MINT, 3, () => { ctx.beginPath(); ctx.arc(52, 112, 13, 0, Math.PI * 2); ctx.stroke(); });
+  strokeIcon(ctx, MINT, 4, () => { ctx.beginPath(); ctx.arc(56, 106, 18, 0, Math.PI * 2); ctx.stroke(); });
   ctx.fillStyle = MINT;
-  ctx.beginPath(); ctx.arc(52, 106.5, 1.9, 0, Math.PI * 2); ctx.fill();
-  roundRect(ctx, 50.4, 110.5, 3.2, 9, 1.6); ctx.fill();
-  text(ctx, 'InScreenLock', 76, 112, 22, 700, MINT, 'left', true);
+  ctx.beginPath(); ctx.arc(56, 98.5, 2.6, 0, Math.PI * 2); ctx.fill();
+  roundRect(ctx, 53.8, 104, 4.4, 12.5, 2.2); ctx.fill();
+  text(ctx, 'InScreenLock', 86, 106, 31, 750, MINT, 'left');
 }
 
 function drawToday(ctx: Ctx) {
-  text(ctx, 'Hoje', 30, 168, 38, 800, '#f4f6f9', 'left', true);
-  text(ctx, 'Sex, 6 de nov.', 32, 214, 17, 400, '#a9b3c0', 'left', true);
-  calendarIcon(ctx, 171, 214, 17, '#a9b3c0', 1.8);
-  roundRect(ctx, 402, 148, 52, 52, 15); ctx.fillStyle = '#1a2028'; ctx.fill();
+  text(ctx, 'Hoje', 30, 172, 56, 800, '#f4f6f9', 'left');
+  ctx.font = `400 22px ${FONT}`;
+  const label = 'Sex, 6 de nov.';
+  text(ctx, label, 32, 222, 22, 400, '#a9b3c0', 'left');
+  calendarIcon(ctx, 32 + ctx.measureText(label).width + 22, 222, 22, '#a9b3c0', 2);
+  roundRect(ctx, 394, 148, 62, 62, 18); ctx.fillStyle = '#1a2028'; ctx.fill();
   ctx.strokeStyle = '#ffffff14'; ctx.lineWidth = 1; ctx.stroke();
-  calendarIcon(ctx, 428, 174, 26, '#dbe2ea', 1.9);
+  calendarIcon(ctx, 425, 179, 30, '#dbe2ea', 2.1);
 }
 
 function drawRing(ctx: Ctx, frame: ScreenFrame) {
-  const cx = 241; const cy = 392; const radius = 126; const stroke = 21;
+  const cx = 241; const cy = 392; const radius = 124; const stroke = 26;
   const start = -Math.PI / 2;
   const color = mix(MINT_RGB, CORAL_RGB, frame.coral);
   ctx.save();
@@ -87,12 +89,12 @@ function drawRing(ctx: Ctx, frame: ScreenFrame) {
   // soft glow plus the progress arc
   if (frame.ringFraction > 0.002) {
     const end = start + Math.PI * 2 * frame.ringFraction;
-    ctx.shadowColor = color; ctx.shadowBlur = 14; ctx.globalAlpha = 0.4 + 0.3 * frame.coral;
+    ctx.shadowColor = color; ctx.shadowBlur = 16; ctx.globalAlpha = 0.4 + 0.3 * frame.coral;
     ctx.beginPath(); ctx.arc(cx, cy, radius, start, end); ctx.strokeStyle = color; ctx.lineWidth = stroke; ctx.stroke();
     ctx.shadowBlur = 0; ctx.globalAlpha = 1;
     ctx.beginPath(); ctx.arc(cx, cy, radius, start, end); ctx.stroke();
     // inner highlight gives the stroke volume
-    ctx.beginPath(); ctx.arc(cx, cy, radius - stroke * 0.28, start, end); ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.lineWidth = 2.5; ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, radius - stroke * 0.28, start, end); ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.lineWidth = 3; ctx.stroke();
   }
   // overshoot cap above the goal
   if (frame.overshoot > 0.01) {
@@ -101,8 +103,8 @@ function drawRing(ctx: Ctx, frame: ScreenFrame) {
   }
   ctx.restore();
   const shown = Math.max(0, Math.min(TOTAL_MINUTES, Math.round(frame.minutes)));
-  text(ctx, `${shown} min`, cx, cy - 6, 48, 800, '#f6f8fb', 'center', true);
-  text(ctx, `Meta ${GOAL_MINUTES} min`, cx, cy + 44, 20, 400, '#aab3bf', 'center', true);
+  text(ctx, `${shown} min`, cx, cy - 8, 62, 800, '#f6f8fb', 'center');
+  text(ctx, `Meta ${GOAL_MINUTES} min`, cx, cy + 46, 26, 400, '#aab3bf', 'center');
 }
 
 function warningTriangle(ctx: Ctx, cx: number, cy: number, size: number, color: string) {
@@ -117,11 +119,11 @@ function drawBanner(ctx: Ctx, alpha: number) {
   if (alpha <= 0.002) return;
   ctx.save(); ctx.globalAlpha = alpha;
   ctx.translate(0, (1 - alpha) * 8);
-  roundRect(ctx, 28, 548, 426, 82, 18); ctx.fillStyle = 'rgba(255,107,122,0.15)'; ctx.fill();
-  ctx.strokeStyle = 'rgba(255,107,122,0.28)'; ctx.lineWidth = 1; ctx.stroke();
-  warningTriangle(ctx, 64, 589, 24, CORAL);
-  text(ctx, 'Limite diário alcançado', 98, 577, 19, 700, '#ff7787', 'left', true);
-  text(ctx, '4 min acima da meta', 98, 604, 15, 400, '#e9808d', 'left', true);
+  roundRect(ctx, 24, 546, 434, 92, 20); ctx.fillStyle = 'rgba(255,107,122,0.15)'; ctx.fill();
+  ctx.strokeStyle = 'rgba(255,107,122,0.3)'; ctx.lineWidth = 1; ctx.stroke();
+  warningTriangle(ctx, 62, 592, 30, CORAL);
+  text(ctx, 'Limite diário alcançado', 100, 576, 25, 700, '#ff7787', 'left');
+  text(ctx, '4 min acima da meta', 100, 610, 20, 400, '#e9808d', 'left');
   ctx.restore();
 }
 
@@ -152,17 +154,17 @@ function tiktokGlyph(ctx: Ctx, x: number, y: number, size: number) {
 
 function drawRows(ctx: Ctx, frame: ScreenFrame) {
   const total = Math.max(0.0001, TOTAL_MINUTES);
-  const rows: Array<[number, string, number, number, (c: Ctx, x: number, y: number, s: number) => void]> = [
-    [652, 'Instagram', INSTAGRAM_MINUTES, 0, instagramGlyph],
-    [724, 'TikTok', TIKTOK_MINUTES, 0, tiktokGlyph],
+  const rows: Array<[number, string, number, (c: Ctx, x: number, y: number, s: number) => void]> = [
+    [654, 'Instagram', INSTAGRAM_MINUTES, instagramGlyph],
+    [734, 'TikTok', TIKTOK_MINUTES, tiktokGlyph],
   ];
-  for (const [y, name, minutes, , glyph] of rows) {
-    roundRect(ctx, 28, y, 426, 62, 17); ctx.fillStyle = '#1b2129'; ctx.fill();
+  for (const [y, name, minutes, glyph] of rows) {
+    roundRect(ctx, 24, y, 434, 70, 20); ctx.fillStyle = '#1b2129'; ctx.fill();
     ctx.strokeStyle = '#ffffff0d'; ctx.lineWidth = 1; ctx.stroke();
-    glyph(ctx, 46, y + 13, 36);
-    text(ctx, name, 96, y + 31, 20, 500, '#eef2f6', 'left', true);
+    glyph(ctx, 42, y + 13, 44);
+    text(ctx, name, 104, y + 35, 25, 500, '#eef2f6', 'left');
     const shown = frame.minutes >= total - 0.0001 ? minutes : Math.round((minutes * frame.minutes) / total);
-    text(ctx, `${shown} min`, 434, y + 32, 19, 400, '#d4dce5', 'right', true);
+    text(ctx, `${shown} min`, 438, y + 36, 24, 400, '#d4dce5', 'right');
   }
 }
 
@@ -173,8 +175,8 @@ function drawNav(ctx: Ctx) {
   for (const [label, cx, icon] of items) {
     const active = icon === 'home';
     const color = active ? MINT : '#a5afbc';
-    if (active) { roundRect(ctx, cx - 36, 842, 72, 62, 18); ctx.fillStyle = 'rgba(34,227,176,0.09)'; ctx.fill(); }
-    const cy = 866; const s = 28 / 24; const x = cx - 12 * s; const y = cy - 12 * s;
+    if (active) { roundRect(ctx, cx - 42, 838, 84, 74, 20); ctx.fillStyle = 'rgba(34,227,176,0.09)'; ctx.fill(); }
+    const cy = 864; const s = 34 / 24; const x = cx - 12 * s; const y = cy - 12 * s;
     strokeIcon(ctx, color, 2, () => {
       ctx.beginPath();
       if (icon === 'home') {
@@ -191,9 +193,9 @@ function drawNav(ctx: Ctx) {
         ctx.stroke();
       }
     });
-    text(ctx, label, cx, 893, 13, active ? 600 : 400, color, 'center');
+    text(ctx, label, cx, 898, 16, active ? 650 : 400, color, 'center');
   }
-  roundRect(ctx, 181, 930, 120, 5, 2.5); ctx.fillStyle = '#f3f6f8'; ctx.fill();
+  roundRect(ctx, 171, 938, 140, 6, 3); ctx.fillStyle = '#f3f6f8'; ctx.fill();
 }
 
 /**

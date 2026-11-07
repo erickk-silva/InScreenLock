@@ -19,16 +19,18 @@ import { useMotionStage } from '@/hooks/useAfter';
 import { usePointerParallax } from '@/hooks/usePointerParallax';
 import { prefersReducedMotion } from '@/lib/motion-preference';
 import { release } from '@/lib/release';
+import { ribbonOutline, ribbonRim, type RibbonSpec } from '@/lib/ribbon';
 
 const SUBHEADLINE = 'Defina limites para suas redes, acompanhe seus hábitos e escolha a hora de parar.';
 const delayed = (ms: number) => ({ '--d': `${ms}ms` }) as CSSProperties;
 const MINT_FLAT = '#2de8b6';
 const GLASS_MINT = { '--spotlight-card-surface': 'rgba(10, 34, 32, .42)', '--spotlight-card-border': 'linear-gradient(145deg, rgba(150,255,230,1), rgba(34,227,176,.34) 38%, rgba(34,227,176,.12) 62%, rgba(34,227,176,.85))', '--spotlight-card-shadow': 'inset 0 1.5px 0 rgba(255,255,255,.5), inset 0 0 34px rgba(34,227,176,.16), inset 0 -22px 34px -22px rgba(34,227,176,.4), 0 38px 70px -26px rgba(34,227,176,.8), 0 0 46px -12px rgba(34,227,176,.38), 0 14px 26px -14px rgba(0,0,0,.6)' } as CSSProperties;
 const GLASS_CORAL = { '--spotlight-card-surface': 'rgba(46, 20, 28, .44)', '--spotlight-card-border': 'linear-gradient(145deg, rgba(255,170,178,1), rgba(255,107,122,.36) 38%, rgba(255,107,122,.14) 62%, rgba(255,107,122,.9))', '--spotlight-card-shadow': 'inset 0 1.5px 0 rgba(255,255,255,.42), inset 0 0 34px rgba(255,107,122,.18), inset 0 -22px 34px -22px rgba(255,107,122,.45), 0 38px 70px -26px rgba(255,84,97,.85), 0 0 46px -12px rgba(255,84,97,.42), 0 14px 26px -14px rgba(0,0,0,.6)' } as CSSProperties;
-// Orbit ribbon: two offset ellipses (even-odd) give a band whose thickness and brightness vary like the approved aurora arc.
-const ORBIT_OUTER = 'M5 385a345 215 0 1 0 690 0a345 215 0 1 0 -690 0Z';
-const ORBIT_INNER = 'M64 372a308 178 0 1 0 616 0a308 178 0 1 0 -616 0Z';
-const RIBBON = `${ORBIT_OUTER}${ORBIT_INNER}`;
+// Aurora ribbon behind the device, like the approved hero: two OPEN crescents of one tilted ellipse (wide and bright at the lower left, a softer sweep up the right side),
+// each swelling and tapering to a point. Their ends hide behind the phone and the top stays dark, so it never reads as a closed halo.
+const RIBBON_LOWER: RibbonSpec = { cx: 380, cy: 410, rx: 365, ry: 240, rotate: -22, from: 236, to: 78, width: 128, peak: 0.42 };
+const RIBBON_RIGHT: RibbonSpec = { cx: 380, cy: 410, rx: 392, ry: 244, rotate: -22, from: 58, to: -84, width: 150, peak: 0.5 };
+const RIBBONS = [RIBBON_LOWER, RIBBON_RIGHT].map((spec) => ({ outline: ribbonOutline(spec), rim: ribbonRim(spec) }));
 const LINE_FROM = { opacity: 0, y: '.5em', filter: 'blur(12px)' };
 const LINE_TO = { opacity: 1, y: 0, filter: 'blur(0px)' };
 
@@ -96,19 +98,20 @@ export default function Hero() {
       <section className="phone-stage" id="demo" aria-label="Demonstração do aplicativo">
         <div className="phone-layer phone-layer-far" data-parallax="4" aria-hidden="true"><div className="phone-halo"/><div className="phone-floor"/></div>
         <div className="phone-layer phone-layer-mid" data-parallax="7" aria-hidden="true">
-          <svg className="phone-orbit" viewBox="0 0 700 740" preserveAspectRatio="none">
+          <svg className="phone-orbit" viewBox="0 0 740 742" preserveAspectRatio="xMidYMid meet">
             <defs>
-              <linearGradient id="ribbon-fill" gradientUnits="userSpaceOnUse" x1="0" y1="640" x2="700" y2="110"><stop offset="0" stopColor="#10f0be" stopOpacity=".82"/><stop offset=".34" stopColor="#09b996" stopOpacity=".4"/><stop offset=".7" stopColor="#13f2c2" stopOpacity=".62"/><stop offset="1" stopColor="#08937a" stopOpacity=".3"/></linearGradient>
-              <linearGradient id="orbit-gradient" gradientUnits="userSpaceOnUse" x1="0" y1="640" x2="700" y2="110"><stop offset="0" stopColor="#7dffe3" stopOpacity=".9"/><stop offset=".3" stopColor="#19ffd0"/><stop offset=".62" stopColor="#05d3a8" stopOpacity=".75"/><stop offset="1" stopColor="#6bffe0" stopOpacity=".9"/></linearGradient>
-              <filter id="ribbon-soft" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="9"/></filter>
-              <filter id="ribbon-haze" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="34"/></filter>
+              <linearGradient id="ribbon-fill-lower" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stopColor="#10f0be" stopOpacity=".05"/><stop offset=".3" stopColor="#14f5c6" stopOpacity=".6"/><stop offset=".62" stopColor="#09b996" stopOpacity=".46"/><stop offset="1" stopColor="#08937a" stopOpacity=".05"/></linearGradient>
+              <linearGradient id="ribbon-fill-right" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stopColor="#10f0be" stopOpacity=".05"/><stop offset=".4" stopColor="#13f2c2" stopOpacity=".95"/><stop offset=".78" stopColor="#09b996" stopOpacity=".6"/><stop offset="1" stopColor="#08937a" stopOpacity=".04"/></linearGradient>
+              <linearGradient id="ribbon-rim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#7dffe3" stopOpacity="0"/><stop offset=".22" stopColor="#7dffe3" stopOpacity=".95"/><stop offset=".78" stopColor="#19ffd0" stopOpacity=".85"/><stop offset="1" stopColor="#19ffd0" stopOpacity="0"/></linearGradient>
+              <linearGradient id="ribbon-rim-right" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stopColor="#7dffe3" stopOpacity="0"/><stop offset=".25" stopColor="#7dffe3" stopOpacity=".9"/><stop offset=".8" stopColor="#19ffd0" stopOpacity=".75"/><stop offset="1" stopColor="#19ffd0" stopOpacity="0"/></linearGradient>
+              <filter id="ribbon-soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="13"/></filter>
+              <filter id="ribbon-haze" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="36"/></filter>
             </defs>
-            <g transform="rotate(-22 350 380)">
-              <path className="ribbon-haze" fill="url(#ribbon-fill)" fillRule="evenodd" filter="url(#ribbon-haze)" d={RIBBON}/>
-              <path className="ribbon-body" fill="url(#ribbon-fill)" fillRule="evenodd" filter="url(#ribbon-soft)" d={RIBBON}/>
-              <path className="phone-orbit-line" pathLength="1" d={ORBIT_INNER}/>
-              <path className="phone-orbit-line phone-orbit-line-outer" pathLength="1" d={ORBIT_OUTER}/>
-            </g>
+            {RIBBONS.map((ribbon, index) => <g key={index} className={index === 0 ? 'ribbon ribbon-lower' : 'ribbon ribbon-right'}>
+              <path className="ribbon-haze" fill={`url(#ribbon-fill-${index === 0 ? 'lower' : 'right'})`} filter="url(#ribbon-haze)" d={ribbon.outline}/>
+              <path className="ribbon-body" fill={`url(#ribbon-fill-${index === 0 ? 'lower' : 'right'})`} filter="url(#ribbon-soft)" d={ribbon.outline}/>
+              <path className="phone-orbit-line" pathLength="1" stroke={`url(#${index === 0 ? 'ribbon-rim' : 'ribbon-rim-right'})`} d={ribbon.rim}/>
+            </g>)}
           </svg>
         </div>
         <div className="float-pos lock-pos" data-parallax="10"><div className="float-bob"><div className="float-tilt float-tilt-lock"><SpotlightCard className="float-card lock-card" style={GLASS_MINT} spotlightColor="rgba(34,227,176,.3)" intensity={.4} spotlightSize={240} softness={.55}><LockGlyph/><p>Você decide<br/>quando parar.</p></SpotlightCard></div></div></div>

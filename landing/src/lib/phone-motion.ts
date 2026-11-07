@@ -1,17 +1,20 @@
 /**
- * Approved hero pose (Euler order YXZ: tipped back by `pitch`, then spun about the vertical axis by `yaw`).
- * The approved reference keeps the screen text horizontal while both long edges lean to the right; a rigid rotation cannot do that
- * without a strong keystone, so the scene also applies a view-space lean (a shear of `LEAN_DEG`, like an off-axis camera).
+ * Approved hero pose, a RIGID orientation fitted to the corners of the approved reference (scripts/fit-pose.mjs):
+ * three.js Euler order 'ZXY', i.e. R = Rz(roll) * Rx(pitch) * Ry(yaw). `yaw` spins the device about its own long axis (the user's 360 turn),
+ * `pitch` tips it back/forward, `roll` leans the whole device in the view plane. No shear anywhere: every angle is a real rotation seen by a perspective camera.
  */
-export const INITIAL_POSE = { yaw: -22, pitch: -8, roll: 0 } as const;
-/** View-space lean of the whole device, in degrees (top edge toward the right). */
-export const LEAN_DEG = 12;
+export const INITIAL_POSE = { yaw: -28, pitch: -20, roll: -10.8 } as const;
+/** How far the user may tip the device up or down from the home pitch. */
+export const PITCH_RANGE = 30;
+/** A flick can never carry the device faster than this (deg/s), so a very fast gesture cannot spin it for many turns. */
+export const MAX_FLICK_DEG_PER_S = 1500;
+export const capFlick = (velocity: number) => Math.max(-MAX_FLICK_DEG_PER_S, Math.min(MAX_FLICK_DEG_PER_S, velocity));
 /** Release velocity is dropped when the pointer rested at least this long before lifting, so a still finger never flings the phone. */
 export const STILL_RELEASE_MS = 80;
 /** Degrees away from the home pose, normalised to [0, 360). Used for announcements so screen readers never hear "1085 graus". */
 export const degreesFromHome = (yaw: number, home: number = INITIAL_POSE.yaw) => ((Math.round(yaw - home) % 360) + 360) % 360;
 export const settleVelocity = (velocity: number, stillForMs: number) => (stillForMs > STILL_RELEASE_MS ? 0 : velocity);
-export const clampPitch = (pitch: number) => Math.max(-30, Math.min(30, pitch));
+export const clampPitch = (pitch: number) => Math.max(INITIAL_POSE.pitch - PITCH_RANGE, Math.min(INITIAL_POSE.pitch + PITCH_RANGE, pitch));
 export const applyDrag = (yaw: number, pitch: number, dx: number, dy: number) => ({
   yaw: yaw + dx * 0.55,
   pitch: clampPitch(pitch + dy * 0.42),

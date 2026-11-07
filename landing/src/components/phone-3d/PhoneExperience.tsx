@@ -3,12 +3,13 @@
 import Image from 'next/image';
 import { Component, useCallback, useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { MoveHorizontal, RotateCcw } from 'lucide-react';
-import { applyDrag, createPose, degreesFromHome, INITIAL_POSE, nearestEquivalentYaw, releaseVelocity, settleVelocity, type PhonePose } from '@/lib/phone-motion';
+import { applyDrag, capFlick, clampPitch, createPose, degreesFromHome, INITIAL_POSE, nearestEquivalentYaw, releaseVelocity, settleVelocity, type PhonePose } from '@/lib/phone-motion';
 import { useWebglSupport } from '@/lib/webgl-support';
-import type { PhoneSceneProps } from './PhoneScene';
+import type { PhoneSceneProps, ScreenQuad } from './PhoneScene';
 
 const POSTER_ALT = 'Demonstração fictícia da tela Início do InScreenLock, com 21 minutos usados e meta de 17 minutos.';
 const DEMO_DESCRIPTION = 'Tela demonstrativa com dados fictícios: Início do InScreenLock com 21 minutos usados, meta de 17 minutos, Instagram com 8 minutos e TikTok com 13 minutos.';
+const POSTER_SIZE = { width: 955, height: 1380 } as const;
 const HINT_DELAY_MS = 2000;
 const TAP_SLOP_PX = 8;
 const DOUBLE_TAP_MS = 320;
@@ -34,6 +35,8 @@ export default function PhoneExperience({ onLimitReached }: { onLimitReached?: (
   const keyLast = useRef(0);
   const keyPending = useRef('');
   const [angles, setAngles] = useState<{ yaw: number; pitch: number }>({ yaw: INITIAL_POSE.yaw, pitch: INITIAL_POSE.pitch });
+  const [quad, setQuad] = useState('');
+  const [frozen, setFrozen] = useState(false);
   const support = useWebglSupport();
   const [Scene, setScene] = useState<ComponentType<PhoneSceneProps> | null>(null);
   const [failed, setFailed] = useState(false);
@@ -87,13 +90,13 @@ export default function PhoneExperience({ onLimitReached }: { onLimitReached?: (
     if (intro === 'done' && window.matchMedia('(hover: none)').matches) armHint(1200);
   }, [intro, armHint]);
 
-  const reportPose = useCallback((yaw: number, pitch: number) => setAngles({ yaw: Number(yaw.toFixed(1)), pitch: Number(pitch.toFixed(1)) }), []);
+  const reportPose = useCallback((yaw: number, pitch: number, corners: ScreenQuad) => { setAngles({ yaw: Number(yaw.toFixed(1)), pitch: Number(pitch.toFixed(1)) }); setQuad(corners.join(',')); }, []);
   const markReady = useCallback(() => setCanvasReady(true), []);
   const introDone = useCallback(() => setIntro('done'), []);
   const markRotated = useCallback(() => { if (!rotated.current) { rotated.current = true; window.clearTimeout(hintTimer.current); setHint(false); } setHasRotated(true); }, []);
   const stopIdle = useCallback(() => {
     if (!pose.current.hasInteracted) {
-      pose.current.hasInteracted = true;
+      pose.current.hasInteracted = true; setFrozen(true);
       pose.current.targetYaw = pose.current.yaw;
       pose.current.targetPitch = pose.current.pitch;
     }
@@ -117,7 +120,7 @@ export default function PhoneExperience({ onLimitReached }: { onLimitReached?: (
     if (event.button !== 0 || (event.target as Element).closest('.phone-controls')) return;
     stopIdle();
     pose.current.recentering = false;
-    pointer.current = { id: event.pointerId, x: event.clientX, y: event.clientY, at: performance.now(), travelled: 0, touch: event.pointerType === 'touch', announced: false };
+    pointer.current = { id: event.pointerId, x: event.clientX, y: event.clientY, at: event.timeStamp, travelled: 0, touch: event.pointerType === 'touch', announced: false };
     pose.current.dragging = true; pose.current.velocityYaw = 0; pose.current.velocityPitch = 0;
     event.currentTarget.setPointerCapture(event.pointerId);
     setDragging(true);
@@ -126,13 +129,13 @@ export default function PhoneExperience({ onLimitReached }: { onLimitReached?: (
     const last = pointer.current;
     if (!last || last.id !== event.pointerId) return;
     // on touch the page keeps vertical scrolling: only horizontal swipes turn the device (the browser cancels the pointer on a vertical pan)
-    const dx = event.clientX - last.x; const dy = last.touch ? 0 : event.clientY - last.y; const now = performance.now(); const elapsed = Math.max(8, now - last.at) / 1000;
+    const dx = event.clientX - last.x; const dy = last.touch ? 0 : event.clientY - last.y; const now = event.timeStamp; const elapsed = Math.max(8, now - last.at) / 1000;
     const next = applyDrag(pose.current.targetYaw, pose.current.targetPitch, dx, dy);
     pose.current.targetYaw = next.yaw; pose.current.targetPitch = next.pitch;
     const travelled = last.travelled + Math.hypot(dx, event.clientY - last.y);
     let announced = last.announced;
     if (travelled > TAP_SLOP_PX) { markRotated(); if (!announced) { announced = true; setAnnouncement('Girando o aparelho.'); } }
-    pose.current.velocityYaw = dx * 0.55 / elapsed; pose.current.velocityPitch = dy * 0.42 / elapsed;
+    pose.current.velocityYaw = capFlick(dx * 0.55 / elapsed); pose.current.velocityPitch = capFlick(dy * 0.42 / elapsed);
     pointer.current = { ...last, x: event.clientX, y: event.clientY, at: now, travelled, announced };
   };
   const release = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -144,12 +147,12 @@ export default function PhoneExperience({ onLimitReached }: { onLimitReached?: (
     const cancelled = event.type === 'pointercancel';
     if (!cancelled && active.travelled <= TAP_SLOP_PX) {
       // a still press is a tap; two quick taps recentre the phone with a spring
-      const now = performance.now(); const previous = lastTap.current;
+      const now = event.timeStamp; const previous = lastTap.current; // event.timeStamp is when the tap happened, not when a busy main thread got to it
       if (previous && now - previous.at < DOUBLE_TAP_MS && Math.hypot(event.clientX - previous.x, event.clientY - previous.y) < 40) { lastTap.current = null; reset(); return; }
       lastTap.current = { at: now, x: event.clientX, y: event.clientY };
     }
     // a finger that rested before lifting (or a cancelled gesture) must not fling the device with its last stale velocity
-    const stillFor = cancelled ? Infinity : performance.now() - active.at;
+    const stillFor = cancelled ? Infinity : event.timeStamp - active.at;
     pose.current.velocityYaw = releaseVelocity(settleVelocity(pose.current.velocityYaw, stillFor), .06);
     pose.current.velocityPitch = releaseVelocity(settleVelocity(pose.current.velocityPitch, stillFor), .06);
     if (active.announced) setAnnouncement('Giro liberado.');
@@ -163,7 +166,7 @@ export default function PhoneExperience({ onLimitReached }: { onLimitReached?: (
       const yaw = pose.current.targetYaw + (event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0);
       const pitch = pose.current.targetPitch + (event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0);
       markRotated();
-      pose.current.targetYaw = yaw; pose.current.targetPitch = Math.max(-30, Math.min(30, pitch));
+      pose.current.targetYaw = yaw; pose.current.targetPitch = clampPitch(pitch);
       announceKeys(`Posição ${degreesFromHome(yaw)} graus.`);
     }
   };
@@ -174,8 +177,9 @@ export default function PhoneExperience({ onLimitReached }: { onLimitReached?: (
   return <div ref={root} className="phone-wrap" tabIndex={0} role="group" aria-label="Smartphone 3D demonstrativo. Use as setas para girar e Home para recentrar." aria-describedby="phone-demo-description"
     onPointerEnter={enter} onPointerLeave={leave} onPointerDown={down} onPointerMove={move} onPointerUp={release} onPointerCancel={release} onKeyDown={keyDown}
     data-testid="phone" data-dragging={dragging} data-intro={intro} data-webgl={live ? 'live' : 'poster'}
-    data-yaw-deg={angles.yaw} data-pitch-deg={angles.pitch} data-roll-deg={INITIAL_POSE.roll}>
-    <Image className={`phone-poster${failed || support === false ? '' : ' phone-poster-pending'}`} style={{ display: live ? 'none' : undefined }} src="/app-screens/phone-poster.svg" alt={POSTER_ALT} fill unoptimized priority />
+    data-idle={frozen ? 'frozen' : 'drifting'} data-screen-quad={quad} data-yaw-deg={angles.yaw} data-pitch-deg={angles.pitch} data-roll-deg={INITIAL_POSE.roll}>
+    {/* the poster is a capture of this very scene at the approved pose: it is the no-WebGL fallback and, dimmed, the stand-in silhouette while the 3D chunk loads */}
+    <Image className={`phone-poster${failed || support === false ? '' : ' is-dim'}${live ? ' is-handoff' : ''}`} src="/app-screens/phone-poster.webp" width={POSTER_SIZE.width} height={POSTER_SIZE.height} alt={POSTER_ALT} unoptimized priority />
     {Scene && !failed && <div className={`phone-canvas${canvasReady ? ' is-ready' : ''}`} aria-hidden="true">
       <SceneBoundary onFailure={markFailure}><Scene pose={pose} active={inView} onFailure={markFailure} onReady={markReady} onPose={reportPose} onLimit={onLimitReached} onIntroDone={introDone} /></SceneBoundary>
     </div>}

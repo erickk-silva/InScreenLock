@@ -18,6 +18,6 @@ export default function DownloadSection() {
       <article className="download-card"><Smartphone aria-hidden="true" /><h3>Compatibilidade</h3><p>Android 9 ou superior. Não há versão para iOS.</p></article>
       <article className="download-card"><ShieldCheck aria-hidden="true" /><h3>Como instalar</h3><p>O Android pede para permitir a instalação do APK. Depois, as permissões de Acesso de uso e Acessibilidade só são concedidas por você, nas configurações do aparelho.</p></article>
     </div>
-    <p className="download-privacy" id="privacidade"><strong>Privacidade:</strong> o app não exige conta e não envia dados para um servidor. As preferências ficam salvas no aparelho.</p>
+    <p className="download-privacy" id="privacidade"><strong>Privacidade:</strong> o app não exige conta, não inclui anúncios e não envia dados para um servidor. As preferências ficam salvas no aparelho; o tempo de uso vem do Android e a lista de todos os apps fica só na memória, sem ser guardada.</p>
   </section>;
 }

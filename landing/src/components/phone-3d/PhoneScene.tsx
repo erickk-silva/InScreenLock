@@ -5,24 +5,29 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Environment, Lightformer } from '@react-three/drei';
 import * as THREE from 'three';
-import { dampAngle, FINAL_FRAME, idleOffsets, INITIAL_POSE, INTRO, LEAN_DEG, LIMIT_CROSS_MS, OFF_FRAME, releaseVelocity, ringTimeline, springSettled, stepSpring, type PhonePose, type ScreenFrame, type Spring } from '@/lib/phone-motion';
+import { dampAngle, FINAL_FRAME, idleOffsets, clampPitch, INITIAL_POSE, INTRO, LIMIT_CROSS_MS, OFF_FRAME, releaseVelocity, ringTimeline, springSettled, stepSpring, type PhonePose, type ScreenFrame, type Spring } from '@/lib/phone-motion';
 import { drawPhoneScreen } from '@/lib/phone-screen';
 import { createBodyGeometry, createPlateGeometry, DISPLAY, GLASS, paintBackTexture, PHONE, Z } from './phone-geometry';
 
 const TEX_W = 788;
 const TEX_H = 1584;
-const FOV = 44;
-const CAMERA_Z = 8.4;
-const CAMERA_NEAR = 4;
-const CAMERA_FAR = 22;
+/** A long lens far from the device: strong enough perspective to read as a camera (right edge nearer than the left), weak enough to keep the screen legible. */
+const FOV = 24;
+const CAMERA_Z = 14;
+const CAMERA_NEAR = 7;
+const CAMERA_FAR = 24;
 /** The canvas is taller than the stage by this fraction on each side, so a rotated device is never cropped. */
 const CANVAS_PAD = 0.12;
 const VISIBLE_HEIGHT = 2 * CAMERA_Z * Math.tan(THREE.MathUtils.degToRad(FOV / 2));
 /** Phone height as a fraction of the stage height at rest (the approved hero shows the device about 95% of the stage). */
-const STAGE_FILL = 0.91;
+const STAGE_FILL = 1.0;
+/** R = Rz(roll) * Rx(pitch) * Ry(yaw): the 360 turn is about the device's own long axis, the roll leans the whole thing in the view plane. */
+const POSE_ORDER = 'ZXY' as const;
 const smooth = (t: number) => { const x = Math.max(0, Math.min(1, t)); return x * x * (3 - 2 * x); };
 
-export type SceneHooks = { onPose?: (yaw: number, pitch: number) => void; onLimit?: () => void; onIntroDone?: () => void };
+/** The four corners of the lit display projected into the canvas, as fractions of its width/height: top-left, top-right, bottom-right, bottom-left. */
+export type ScreenQuad = readonly [number, number, number, number, number, number, number, number];
+export type SceneHooks = { onPose?: (yaw: number, pitch: number, quad: ScreenQuad) => void; onLimit?: () => void; onIntroDone?: () => void };
 
 /** The app screen is drawn in code on a canvas, so it can be alive (power on, ring sweep, counter) and always matches the poster. */
 function useScreenTexture() {
@@ -39,7 +44,7 @@ function useScreenTexture() {
   useEffect(() => {
     let alive = true;
     const weights = [400, 500, 600, 700, 800];
-    Promise.all(weights.map((w) => document.fonts?.load(`italic ${w} 20px "Inter Variable"`))).then(() => { if (alive) screen.paint(screen.current()); }).catch(() => undefined);
+    Promise.all(weights.map((w) => document.fonts?.load(`${w} 20px "Inter Variable"`))).then(() => { if (alive) screen.paint(screen.current()); }).catch(() => undefined);
     return () => { alive = false; screen.texture.dispose(); };
   }, [screen]);
   return screen;
@@ -54,26 +59,31 @@ function useDeviceParts() {
     const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 1100;
     const ctx = canvas.getContext('2d'); if (ctx) paintBackTexture(ctx, canvas.width, canvas.height);
     const backTexture = new THREE.CanvasTexture(canvas); backTexture.colorSpace = THREE.SRGBColorSpace; backTexture.anisotropy = 8;
-    return { body: createBodyGeometry(), glass: createPlateGeometry(GLASS.width, GLASS.height, GLASS.corner), display: createPlateGeometry(DISPLAY.width, DISPLAY.height, DISPLAY.corner), back: createPlateGeometry(GLASS.width + 0.02, GLASS.height + 0.1, GLASS.corner + 0.02), island: createPlateGeometry(0.8, 0.88, 0.17), islandRim: createPlateGeometry(0.86, 0.94, 0.2), backTexture };
+    return { body: createBodyGeometry(), glass: createPlateGeometry(GLASS.width, GLASS.height, GLASS.corner), display: createPlateGeometry(DISPLAY.width, DISPLAY.height, DISPLAY.corner), back: createPlateGeometry(GLASS.width, GLASS.height + 0.04, GLASS.corner + 0.04), island: createPlateGeometry(0.8, 0.88, 0.17), islandRim: createPlateGeometry(0.86, 0.94, 0.2), backTexture };
   }, []);
   useEffect(() => () => { parts.body.dispose(); parts.glass.dispose(); parts.display.dispose(); parts.back.dispose(); parts.island.dispose(); parts.islandRim.dispose(); parts.backTexture.dispose(); }, [parts]);
   return parts;
 }
 
+const CORNER = new THREE.Vector3();
+/** Where the display sits in the canvas right now (normalised 0..1, y down). Reported with the pose so the layout can be verified against real pixels. */
+function projectDisplay(device: THREE.Object3D, camera: THREE.Camera): ScreenQuad {
+  device.updateMatrixWorld(true);
+  const out: number[] = [];
+  for (const [sx, sy] of [[-1, 1], [1, 1], [1, -1], [-1, -1]]) {
+    CORNER.set((sx * DISPLAY.width) / 2, DISPLAY.y + (sy * DISPLAY.height) / 2, Z.display).applyMatrix4(device.matrixWorld).project(camera);
+    out.push(Number(((CORNER.x + 1) / 2).toFixed(4)), Number(((1 - CORNER.y) / 2).toFixed(4)));
+  }
+  return out as unknown as ScreenQuad;
+}
+
 function Device({ pose, onPose, onLimit, onIntroDone }: { pose: React.MutableRefObject<PhonePose> } & SceneHooks) {
-  const lean = useRef<THREE.Group>(null);
   const root = useRef<THREE.Group>(null);
   const screenGlow = useRef<THREE.PointLight>(null);
   const lastPoseReport = useRef(0);
   const intro = useRef({ ms: 0, frames: 0, wall: 0, yaw: { value: INTRO.yawOffset, velocity: 0 } as Spring, rise: { value: -INTRO.rise, velocity: 0 } as Spring, limit: false, done: false });
   const screen = useScreenTexture();
   const parts = useDeviceParts();
-  useEffect(() => {
-    const group = lean.current; if (!group) return;
-    group.matrixAutoUpdate = false;
-    group.matrix.set(1, Math.tan(THREE.MathUtils.degToRad(LEAN_DEG)), 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
-    group.matrixWorldNeedsUpdate = true;
-  }, []);
   useFrame((state, rawDelta) => {
     if (!root.current) return;
     const p = pose.current; const it = intro.current;
@@ -109,7 +119,7 @@ function Device({ pose, onPose, onLimit, onIntroDone }: { pose: React.MutableRef
     // ---- user inertia ----
     if (!p.dragging && (Math.abs(p.velocityYaw) + Math.abs(p.velocityPitch) > 0.2)) {
       p.targetYaw += p.velocityYaw * delta;
-      p.targetPitch = THREE.MathUtils.clamp(p.targetPitch + p.velocityPitch * delta, -30, 30);
+      p.targetPitch = clampPitch(p.targetPitch + p.velocityPitch * delta);
       p.velocityYaw = releaseVelocity(p.velocityYaw, delta);
       p.velocityPitch = releaseVelocity(p.velocityPitch, delta);
     }
@@ -133,7 +143,7 @@ function Device({ pose, onPose, onLimit, onIntroDone }: { pose: React.MutableRef
     }
 
     root.current.position.set(HOME_X * scale, HOME_Y * scale + it.rise.value + p.floatY * unitPerPx, 0);
-    root.current.rotation.set(THREE.MathUtils.degToRad(p.pitch), THREE.MathUtils.degToRad(p.yaw + it.yaw.value), THREE.MathUtils.degToRad(p.roll), 'YXZ');
+    root.current.rotation.set(THREE.MathUtils.degToRad(p.pitch), THREE.MathUtils.degToRad(p.yaw + it.yaw.value), THREE.MathUtils.degToRad(p.roll), POSE_ORDER);
 
     // moving key light: the glossy edge highlights follow the pointer, and the rotation sweeps the reflections
     const key = state.scene.getObjectByName('key-light');
@@ -141,13 +151,13 @@ function Device({ pose, onPose, onLimit, onIntroDone }: { pose: React.MutableRef
 
     if (state.clock.elapsedTime - lastPoseReport.current > 0.12) {
       lastPoseReport.current = state.clock.elapsedTime;
-      onPose?.(p.yaw + it.yaw.value, p.pitch);
+      onPose?.(p.yaw + it.yaw.value, p.pitch, projectDisplay(root.current, state.camera));
     }
   });
-  const frameMetal = { color: '#3a444f', metalness: 1, roughness: 0.27, clearcoat: 0.35, clearcoatRoughness: 0.22, envMapIntensity: 1.6 } as const;
-  const bright = { color: '#6b7783', metalness: 1, roughness: 0.2, envMapIntensity: 1.8 } as const;
+  const frameMetal = { color: '#46515d', metalness: 1, roughness: 0.25, clearcoat: 0.4, clearcoatRoughness: 0.2, envMapIntensity: 1.45 } as const;
+  const bright = { color: '#9aa7b4', metalness: 1, roughness: 0.18, envMapIntensity: 1.9 } as const;
   const shell = parts.body;
-  return <group ref={lean}><group ref={root} rotation={[THREE.MathUtils.degToRad(INITIAL_POSE.pitch), THREE.MathUtils.degToRad(INITIAL_POSE.yaw), THREE.MathUtils.degToRad(INITIAL_POSE.roll), 'YXZ']}>
+  return <group ref={root} rotation={[THREE.MathUtils.degToRad(INITIAL_POSE.pitch), THREE.MathUtils.degToRad(INITIAL_POSE.yaw), THREE.MathUtils.degToRad(INITIAL_POSE.roll), POSE_ORDER]}>
     <pointLight ref={screenGlow} position={[0, 0.2, 1.1]} intensity={0} distance={3.2} color="#22e3b0" />
     <mesh geometry={shell}><meshPhysicalMaterial {...frameMetal} /></mesh>
     {/* front: black glass with a thin bezel, the live display, a faint reflection layer and the circular punch-hole camera */}
@@ -158,7 +168,7 @@ function Device({ pose, onPose, onLimit, onIntroDone }: { pose: React.MutableRef
     <mesh position={[0, DISPLAY.height / 2 - 0.085, Z.hole - 0.0003]}><ringGeometry args={[0.052, 0.066, 32]} /><meshStandardMaterial color="#3d4852" metalness={0.9} roughness={0.3} polygonOffset polygonOffsetFactor={-5} /></mesh>
     <mesh position={[0.012, DISPLAY.height / 2 - 0.095, Z.hole + 0.0004]}><circleGeometry args={[0.012, 16]} /><meshBasicMaterial color="#1b3340" polygonOffset polygonOffsetFactor={-6} /></mesh>
     {/* back: textured glass panel and the camera module (a different face, never a mirrored screen) */}
-    <mesh geometry={parts.back} position={[0, 0, Z.back]} rotation={[0, Math.PI, 0]}><meshPhysicalMaterial map={parts.backTexture} color="#ffffff" metalness={0.25} roughness={0.38} clearcoat={0.8} clearcoatRoughness={0.2} envMapIntensity={1.0} /></mesh>
+    <mesh geometry={parts.back} position={[0, 0, Z.back]} rotation={[0, Math.PI, 0]}><meshPhysicalMaterial map={parts.backTexture} color="#ffffff" metalness={0.2} roughness={0.45} clearcoat={0.5} clearcoatRoughness={0.3} envMapIntensity={0.55} /></mesh>
     <group position={[0.5, 1.78, Z.back - 0.0015]} rotation={[0, Math.PI, 0]}>
       <mesh geometry={parts.islandRim} position={[0, 0, 0.004]}><meshStandardMaterial color="#9aa6b3" metalness={1} roughness={0.25} envMapIntensity={1.4} /></mesh>
       <mesh geometry={parts.island} position={[0, 0, 0.012]}><meshPhysicalMaterial color="#2c353f" metalness={0.7} roughness={0.28} clearcoat={0.9} polygonOffset polygonOffsetFactor={-1} /></mesh>
@@ -169,11 +179,11 @@ function Device({ pose, onPose, onLimit, onIntroDone }: { pose: React.MutableRef
       </group>)}
       <mesh position={[0.24, 0.3, 0.025]}><circleGeometry args={[0.045, 20]} /><meshStandardMaterial color="#d9e2ea" emissive="#fff7df" emissiveIntensity={0.25} /></mesh>
     </group>
-    {/* side keys on the right edge, where the specular highlight lives */}
-    <mesh position={[PHONE.width / 2 + 0.006, 0.95, 0]}><boxGeometry args={[0.04, 0.52, 0.085]} /><meshPhysicalMaterial {...bright} /></mesh>
-    <mesh position={[PHONE.width / 2 + 0.006, 0.28, 0]}><boxGeometry args={[0.04, 0.34, 0.085]} /><meshPhysicalMaterial {...bright} /></mesh>
-    <mesh position={[-PHONE.width / 2 - 0.004, 0.8, 0]}><boxGeometry args={[0.03, 0.4, 0.07]} /><meshPhysicalMaterial {...bright} /></mesh>
-  </group></group>;
+    {/* side keys proud of the right edge (power above, volume rocker below) and a small key on the left; lighter metal so the profile reads at a glance */}
+    <mesh position={[PHONE.width / 2 + 0.012, 0.95, 0]}><boxGeometry args={[0.07, 0.62, 0.13]} /><meshPhysicalMaterial {...bright} /></mesh>
+    <mesh position={[PHONE.width / 2 + 0.012, 0.18, 0]}><boxGeometry args={[0.07, 0.46, 0.13]} /><meshPhysicalMaterial {...bright} /></mesh>
+    <mesh position={[-PHONE.width / 2 - 0.008, 0.8, 0]}><boxGeometry args={[0.05, 0.4, 0.1]} /><meshPhysicalMaterial {...bright} /></mesh>
+  </group>;
 }
 
 function SceneContent({ pose, ...hooks }: { pose: React.MutableRefObject<PhonePose> } & SceneHooks) {
