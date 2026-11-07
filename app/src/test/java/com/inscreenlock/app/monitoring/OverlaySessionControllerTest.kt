@@ -12,13 +12,74 @@ class OverlaySessionControllerTest {
     private val controller = OverlaySessionController(host)
     private val instagram = DailyTimeCalculator.INSTAGRAM_PACKAGE
 
-    @Test fun unrelatedWindowRemovesOverlayAndStopsRefreshLoop() {
+    private val other = "com.example.other"
+    private val systemUi = setOf("com.android.systemui")
+
+    @Test fun foreignWindowHidesOverlayButKeepsSessionUntilUsageReconfirmation() {
         controller.onWindowEvent(instagram, emptySet())
         controller.presentOverlay { true }
-        controller.onWindowEvent("com.example.other", emptySet())
+        val resolution = controller.onWindowEvent(other, systemUi)
+        assertFalse(host.visible)
+        assertEquals(instagram, controller.targetPackage)
+        assertTrue(controller.loopRunning)
+        assertEquals(true, resolution?.transientWindow)
+        controller.presentOverlay { true }
+        assertFalse(host.visible)
+    }
+
+    @Test fun foreignWindowFollowedByUsageStatsOnTargetResumesOverlay() {
+        controller.onWindowEvent(instagram, emptySet())
+        controller.presentOverlay { true }
+        controller.onWindowEvent(other, systemUi)
+        assertEquals(true, controller.reconfirmUsage(instagram, systemUi))
+        assertEquals(instagram, controller.targetPackage)
+        assertTrue(controller.loopRunning)
+        controller.presentOverlay { true }
+        assertTrue(host.visible)
+    }
+
+    @Test fun foreignWindowFollowedByUsageStatsOnAnotherAppEndsSession() {
+        controller.onWindowEvent(instagram, emptySet())
+        controller.presentOverlay { true }
+        controller.onWindowEvent(other, systemUi)
+        assertEquals(false, controller.reconfirmUsage("com.example.third", systemUi))
         assertFalse(host.visible)
         assertFalse(controller.loopRunning)
         assertNull(controller.targetPackage)
+    }
+
+    @Test fun foreignWindowFollowedByMissingUsageStatsEndsSessionWithoutShowingLock() {
+        controller.onWindowEvent(instagram, emptySet())
+        controller.presentOverlay { true }
+        controller.onWindowEvent(other, systemUi)
+        assertEquals(false, controller.reconfirmUsage(null, systemUi))
+        assertFalse(controller.loopRunning)
+        assertNull(controller.targetPackage)
+        controller.presentOverlay { true }
+        assertFalse(host.visible)
+    }
+
+    @Test fun foreignWindowFollowedByTransientUsageStatsEndsSession() {
+        controller.onWindowEvent(instagram, emptySet())
+        controller.onWindowEvent(other, systemUi)
+        assertEquals(false, controller.reconfirmUsage("com.android.systemui", systemUi))
+        assertNull(controller.targetPackage)
+    }
+
+    @Test fun targetEventAfterForeignWindowConfirmsSessionAndMissingUsageStatsKeepsTransientSemantics() {
+        controller.onWindowEvent(instagram, emptySet())
+        controller.onWindowEvent(other, systemUi)
+        controller.onWindowEvent(instagram, systemUi)
+        assertEquals(instagram, controller.targetPackage)
+        assertNull(controller.reconfirmUsage(null, systemUi))
+        assertEquals(instagram, controller.targetPackage)
+    }
+
+    @Test fun foreignWindowWithoutActiveSessionStaysIdle() {
+        val resolution = controller.onWindowEvent(other, systemUi)
+        assertNull(resolution?.targetPackage)
+        assertNull(controller.targetPackage)
+        assertFalse(controller.loopRunning)
     }
 
     @Test fun transientWindowHidesOverlayAndKeepsTargetUntilReconfirmation() {

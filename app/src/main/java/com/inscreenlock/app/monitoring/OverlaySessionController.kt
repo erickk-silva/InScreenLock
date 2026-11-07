@@ -16,6 +16,7 @@ class OverlaySessionController(private val host: OverlaySessionHost) {
         private set
     private var transientWindow = false
     private var overlayVisible = false
+    private var foreignWindowPending = false
     private var reconnectionAttempted = false
 
     fun resumeFromReconnection(
@@ -48,7 +49,19 @@ class OverlaySessionController(private val host: OverlaySessionHost) {
         if (eventPackage == ownPackageName && eventPackage != null && eventClassName !in ownActivityClassNames) {
             return null
         }
-        val resolution = ForegroundResolver.resolveWindowEvent(eventPackage, transientPackages, targetPackage)
+        val activeTarget = targetPackage
+        val resolution = ForegroundResolver.resolveWindowEvent(eventPackage, transientPackages, activeTarget)
+        val ownActivityEvent = eventPackage != null && eventPackage == ownPackageName
+        if (resolution.targetPackage == null && activeTarget != null && !ownActivityEvent) {
+            // Another window (e.g. back gesture or shade) reported state while the target may still be in
+            // the foreground: hide now, let the UsageStats reconfirmation decide whether the session ends.
+            foreignWindowPending = true
+            transientWindow = true
+            loopRunning = true
+            hideOverlay()
+            return WindowForegroundResolution(activeTarget, transientWindow = true)
+        }
+        if (!resolution.transientWindow) foreignWindowPending = false
         targetPackage = resolution.targetPackage
         transientWindow = resolution.transientWindow
         if (targetPackage == null) {
@@ -64,13 +77,15 @@ class OverlaySessionController(private val host: OverlaySessionHost) {
     fun reconfirmUsage(observedForegroundPackage: String?, transientPackages: Set<String>): Boolean? {
         val target = targetPackage ?: return false
         val active = ForegroundResolver.resolveUsageStats(target, observedForegroundPackage, transientPackages)
-        when (active) {
-            false -> {
-                targetPackage = null
-                transientWindow = false
-                loopRunning = false
-                hideOverlay()
+        if (foreignWindowPending) {
+            foreignWindowPending = false
+            if (active != true) {
+                endSession()
+                return false
             }
+        }
+        when (active) {
+            false -> endSession()
             true -> transientWindow = false
             null -> {
                 transientWindow = observedForegroundPackage in transientPackages
@@ -92,9 +107,12 @@ class OverlaySessionController(private val host: OverlaySessionHost) {
         overlayVisible = false
     }
 
-    fun reset() {
+    fun reset() = endSession()
+
+    private fun endSession() {
         targetPackage = null
         transientWindow = false
+        foreignWindowPending = false
         loopRunning = false
         hideOverlay()
     }
