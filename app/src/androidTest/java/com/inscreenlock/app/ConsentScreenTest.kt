@@ -30,6 +30,14 @@ class ConsentScreenTest {
         composeRule.onNodeWithTag("onboarding-start").performClick()
         composeRule.onNodeWithText("Seu uso, no seu ritmo").assertIsDisplayed()
         composeRule.onNodeWithText("inclui mensagens e outras áreas", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("tempo em primeiro plano por app", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("períodos com a tela ligada ou desligada", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("eventos de bloqueio de tela", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("limite diário combinado de Instagram e TikTok", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("painel de hoje e os últimos 7 dias", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("O histórico continua no Android", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("apenas em memória", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("sem enviá-los nem salvá-los no aparelho", substring = true).assertIsDisplayed()
         composeRule.onNodeWithText(
             "Não lemos nem armazenamos mensagens, legendas ou imagens."
         ).assertIsDisplayed()

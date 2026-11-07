@@ -639,8 +639,11 @@ private fun ConsentScreen(onContinue: () -> Unit) {
         )
         Spacer(Modifier.height(12.dp))
         Text(
-            "Com Acesso de uso, o InScreenLock lê o tempo em primeiro plano de todos os apps de hoje " +
-                "somente para mostrar este painel neste aparelho. Nada sai do aparelho nem é salvo.",
+            "Com Acesso de uso, o InScreenLock lê no histórico do Android o tempo em primeiro plano por app, " +
+                "os períodos com a tela ligada ou desligada e os eventos de bloqueio de tela. Esses dados " +
+                "calculam o limite diário combinado de Instagram e TikTok, que aciona o aviso ou bloqueio, " +
+                "e mostram o painel de hoje e os últimos 7 dias. O histórico continua no Android; o app " +
+                "mantém esses dados apenas em memória, sem enviá-los nem salvá-los no aparelho.",
             color = Muted,
             style = MaterialTheme.typography.bodyLarge,
         )
@@ -1160,7 +1163,7 @@ private fun PrivacyRoute(modifier: Modifier, settings: UserSettings, deviceSecur
     Column(modifier.fillMaxSize().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = 640.dp).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
         ScreenHeader("Privacidade e dados", onBack = onBack)
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            PrivacySection(R.drawable.ic_trust_permissions, "Uso medido", "Com Acesso de uso, o InScreenLock lê o tempo em primeiro plano de todos os apps de hoje somente para mostrar o painel neste aparelho; nada sai do aparelho nem é salvo. Sem conta, rede ou anúncios.")
+            PrivacySection(R.drawable.ic_trust_permissions, "Uso medido", "Com Acesso de uso, o InScreenLock lê no histórico do Android o tempo em primeiro plano por app, os períodos com a tela ligada ou desligada e os eventos de bloqueio de tela. Esses dados calculam o limite diário combinado de Instagram e TikTok, que aciona o aviso ou bloqueio, e mostram o painel de hoje e os últimos 7 dias. O histórico continua no Android; o app mantém esses dados apenas em memória, sem enviá-los nem salvá-los no aparelho. Sem conta, rede ou anúncios.")
             PrivacySection(R.drawable.ic_trust_visibility, "O que o serviço reconhece", "O serviço recebe notificações de mudança de janela de qualquer app e lê apenas o nome do pacote para reconhecer entradas e saídas do Instagram/TikTok; descarta os demais e não guarda esses dados.")
             PrivacySection(R.drawable.ic_trust_device, "O que fica salvo", "Guardamos preferências e o maior limite já avisado no dia; o tempo vem do histórico de uso do Android.")
             PrivacySection(R.drawable.ic_lock_symbol, "Bloqueio e controles", "O bloqueio cobre a janela inteira do app, inclusive login, e oferece Início e desbloqueio por credencial. Desativar Acessibilidade nas configurações do Android encerra o bloqueio; isso é intencional pela política do Android. Desinstalar apaga os dados do InScreenLock.")
