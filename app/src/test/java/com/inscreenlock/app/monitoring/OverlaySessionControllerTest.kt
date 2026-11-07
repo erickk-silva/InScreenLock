@@ -1,6 +1,8 @@
 package com.inscreenlock.app.monitoring
 
 import com.inscreenlock.app.domain.DailyTimeCalculator
+import com.inscreenlock.app.domain.UsageSignal
+import com.inscreenlock.app.domain.currentForegroundPackage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -36,6 +38,31 @@ class OverlaySessionControllerTest {
         assertTrue(controller.loopRunning)
         controller.presentOverlay { true }
         assertTrue(host.visible)
+    }
+
+    @Test fun foreignReconfirmationIsPendingOnlyBetweenForeignEventAndReconfirmation() {
+        assertFalse(controller.foreignReconfirmationPending)
+        controller.onWindowEvent(instagram, emptySet())
+        assertFalse(controller.foreignReconfirmationPending)
+        controller.onWindowEvent(other, systemUi)
+        assertTrue(controller.foreignReconfirmationPending)
+        controller.reconfirmUsage(instagram, systemUi)
+        assertFalse(controller.foreignReconfirmationPending)
+    }
+
+    @Test fun longSessionSurvivesForeignEventWhenExpandedLookbackResolvesTarget() {
+        controller.onWindowEvent(instagram, emptySet())
+        controller.onWindowEvent(other, systemUi)
+        assertTrue(controller.foreignReconfirmationPending)
+        val now = 10 * 60 * 60 * 1000L
+        val query = { start: Long, end: Long ->
+            listOf(UsageSignal(now - 40 * 60_000L, UsageSignal.Kind.APP_FOREGROUND, instagram))
+                .filter { it.timestampMs in start..end }
+        }
+        val observed = currentForegroundPackage(now, expandLookback = controller.foreignReconfirmationPending, query = query)
+        assertEquals(true, controller.reconfirmUsage(observed, systemUi))
+        assertEquals(instagram, controller.targetPackage)
+        assertTrue(controller.loopRunning)
     }
 
     @Test fun foreignWindowFollowedByUsageStatsOnAnotherAppEndsSession() {

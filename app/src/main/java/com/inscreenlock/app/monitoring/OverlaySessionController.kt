@@ -17,6 +17,8 @@ class OverlaySessionController(private val host: OverlaySessionHost) {
     private var transientWindow = false
     private var overlayVisible = false
     private var foreignWindowPending = false
+    /** True while a foreign window event awaits UsageStats reconfirmation (needs the expanded lookback). */
+    val foreignReconfirmationPending: Boolean get() = foreignWindowPending
     private var reconnectionAttempted = false
 
     fun resumeFromReconnection(

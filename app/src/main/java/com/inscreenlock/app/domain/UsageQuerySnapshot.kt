@@ -28,3 +28,22 @@ fun recentForegroundPackage(signals: List<UsageSignal>): String? {
     }
     return foregroundPackage
 }
+
+private const val RECENT_FOREGROUND_LOOKBACK_MS = 15 * 60 * 1000L
+
+/**
+ * Cheap path: one query over the last 15 minutes. With [expandLookback] the window grows until a foreground
+ * package resolves, so a long session without recent activity transitions is still recognised.
+ */
+fun currentForegroundPackage(
+    nowMs: Long,
+    expandLookback: Boolean,
+    query: (startMs: Long, endMs: Long) -> List<UsageSignal>,
+): String? {
+    val signals = if (expandLookback) {
+        UsageWindow.querySignalsUntilForegroundResolved(nowMs, query)
+    } else {
+        query((nowMs - RECENT_FOREGROUND_LOOKBACK_MS).coerceAtLeast(0L), nowMs)
+    }
+    return recentForegroundPackage(signals)
+}

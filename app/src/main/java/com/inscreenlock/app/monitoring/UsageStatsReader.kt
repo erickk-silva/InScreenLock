@@ -19,7 +19,7 @@ import com.inscreenlock.app.domain.UsageWindow
 import com.inscreenlock.app.domain.WeekUsage
 import com.inscreenlock.app.domain.WeekUsageCalculator
 import com.inscreenlock.app.domain.rankUsageByPackage
-import com.inscreenlock.app.domain.recentForegroundPackage
+import com.inscreenlock.app.domain.currentForegroundPackage
 import java.time.ZoneId
 import java.util.concurrent.ConcurrentHashMap
 
@@ -90,27 +90,24 @@ class UsageStatsReader(private val context: Context) {
         }.getOrNull()
     }
 
+    /** Cheap 15-minute lookup for the normal refresh. */
     fun recentForegroundPackage(nowMs: Long = System.currentTimeMillis()): String? =
-        foregroundPackage(nowMs, FOREGROUND_LOOKBACK_MS)
+        currentForeground(nowMs, expandLookback = false)
 
-    /** Bounded historical lookup used only once after a service reconnection. */
-    fun foregroundPackageForReconnection(nowMs: Long = System.currentTimeMillis()): String? {
+    /** Expanding historical lookup, used after a service reconnection and to reconfirm a foreign window event. */
+    fun foregroundPackageForReconnection(nowMs: Long = System.currentTimeMillis()): String? =
+        currentForeground(nowMs, expandLookback = true)
+
+    private fun currentForeground(nowMs: Long, expandLookback: Boolean): String? {
         if (!hasUsageAccess()) return null
         val manager = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return null
-        return runCatching {
-            val signals = UsageWindow.querySignalsUntilForegroundResolved(nowMs) { startMs, endMs ->
+        return try {
+            currentForegroundPackage(nowMs, expandLookback) { startMs, endMs ->
                 readSignals(manager, startMs, endMs) ?: error("Usage events unavailable")
             }
-            recentForegroundPackage(signals)
-        }.getOrNull()
-    }
-
-    private fun foregroundPackage(nowMs: Long, lookbackMs: Long): String? {
-        if (!hasUsageAccess()) return null
-        val manager = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return null
-        return runCatching {
-            readSignals(manager, (nowMs - lookbackMs).coerceAtLeast(0L), nowMs)?.let(::recentForegroundPackage)
-        }.getOrNull()
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun readSignals(manager: UsageStatsManager, startMs: Long, endMs: Long): List<UsageSignal>? {
@@ -196,6 +193,5 @@ class UsageStatsReader(private val context: Context) {
     private companion object {
         const val SYSTEM_UI_PACKAGE = "com.android.systemui"
         const val ICON_SIZE_PX = 96
-        const val FOREGROUND_LOOKBACK_MS = 15 * 60 * 1000L
     }
 }

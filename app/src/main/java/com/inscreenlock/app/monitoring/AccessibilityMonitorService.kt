@@ -10,6 +10,7 @@ import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
 import android.view.inputmethod.InputMethodManager
 import android.os.PowerManager
+import android.os.SystemClock
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -27,6 +28,8 @@ import com.inscreenlock.app.domain.BudgetEvaluator
 import com.inscreenlock.app.domain.BudgetLevel
 import com.inscreenlock.app.domain.BadgeStatus
 import com.inscreenlock.app.domain.DailyTimeCalculator
+import com.inscreenlock.app.domain.ExpiringValue
+import com.inscreenlock.app.domain.UsageTotals
 import com.inscreenlock.app.domain.MonitoringGate
 import com.inscreenlock.app.domain.ReactionMode
 import com.inscreenlock.app.domain.LockPolicy
@@ -58,6 +61,7 @@ class AccessibilityMonitorService : AccessibilityService() {
     private var overlayIsLock = false
     private var refreshJob: kotlinx.coroutines.Job? = null
     private var lastDecisionShouldLock = false
+    private val totalsCache = ExpiringValue<UsageTotals>(TOTALS_CACHE_TTL_MS)
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -156,6 +160,7 @@ class AccessibilityMonitorService : AccessibilityService() {
             removeOverlay()
         } else {
             lastDecisionShouldLock = false
+            totalsCache.clear()
             startRefreshLoop()
         }
     }
@@ -198,7 +203,11 @@ class AccessibilityMonitorService : AccessibilityService() {
     private suspend fun refreshOverlay() {
         val targetPackage = currentTargetPackage ?: return
         val transientPackages = transientPackages()
-        val usageForeground = withContext(Dispatchers.IO) { usageStatsReader.recentForegroundPackage() }
+        val expandLookback = sessionController?.foreignReconfirmationPending == true
+        val usageForeground = withContext(Dispatchers.IO) {
+            if (expandLookback) usageStatsReader.foregroundPackageForReconnection()
+            else usageStatsReader.recentForegroundPackage()
+        }
         if (currentTargetPackage != targetPackage) return
         when (sessionController?.reconfirmUsage(usageForeground, transientPackages)) {
             false -> {
@@ -230,7 +239,11 @@ class AccessibilityMonitorService : AccessibilityService() {
             return
         }
 
-        val totals = withContext(Dispatchers.IO) { usageStatsReader.todayTotals() }
+        val nowElapsedMs = SystemClock.elapsedRealtime()
+        // While locked the 2 s tick only needs a fresh foreground check; totals are reused for a short TTL.
+        val totals = (if (lastDecisionShouldLock) totalsCache.get(nowElapsedMs) else null)
+            ?: withContext(Dispatchers.IO) { usageStatsReader.todayTotals() }
+                ?.also { totalsCache.put(it, nowElapsedMs) }
         if (currentTargetPackage != targetPackage) return
         val clockReading = settingsRepository.clockReading()
         settingsRepository.clearExpiredUnlock(LocalDate.now(), clockReading)
@@ -396,6 +409,7 @@ class AccessibilityMonitorService : AccessibilityService() {
     private companion object {
         const val TRANSIENT_RECONFIRM_DELAY_MS = 1_500L
         const val MINUTE_MS = 60_000L
+        const val TOTALS_CACHE_TTL_MS = 10_000L
         val OWN_ACTIVITY_CLASS_NAMES = setOf(MainActivity::class.java.name, UnlockActivity::class.java.name)
         const val SYSTEM_UI_PACKAGE = "com.android.systemui"
     }

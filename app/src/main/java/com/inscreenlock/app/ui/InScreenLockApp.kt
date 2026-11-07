@@ -94,6 +94,7 @@ import com.inscreenlock.app.domain.rankUsageByPackage
 import com.inscreenlock.app.monitoring.AccessibilityMonitorService
 import com.inscreenlock.app.monitoring.AppUsageEntry
 import com.inscreenlock.app.monitoring.UsageStatsReader
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -188,6 +189,29 @@ fun InScreenLockApp(
     var weekUsage by remember { mutableStateOf<WeekUsage?>(null) }
     var weekLoading by remember { mutableStateOf(false) }
     var weekError by remember { mutableStateOf(false) }
+    var weekInFlight by remember { mutableStateOf(false) }
+    var weekAccessAtLoad by remember { mutableStateOf<Boolean?>(null) }
+    // Queries the week on demand; keeps the previous result visible while a silent refresh runs.
+    suspend fun loadWeek() {
+        if (weekInFlight) return
+        weekInFlight = true
+        val accessAtStart = usageAvailable
+        val showLoading = weekUsage == null
+        if (showLoading) weekLoading = true
+        weekError = false
+        try {
+            weekUsage = withContext(Dispatchers.IO) { usageReader.weekUsage() }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+            weekUsage = null
+            weekError = true
+        } finally {
+            weekAccessAtLoad = accessAtStart
+            weekLoading = false
+            weekInFlight = false
+        }
+    }
     var pendingProtectedChange by remember { mutableStateOf<(() -> Unit)?>(null) }
     val authenticationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK) pendingProtectedChange?.invoke()
@@ -200,6 +224,8 @@ fun InScreenLockApp(
 
     LaunchedEffect(lifecycleOwner, usageReader, selectedRoute) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            // Entering Análises (or returning to the app) always re-queries so today's partial day is current.
+            var weekRefreshNeeded = true
             while (isActive) {
                 val permissionState = withContext(Dispatchers.IO) {
                     usageReader.hasUsageAccess() to isAccessibilityServiceEnabled(context)
@@ -212,13 +238,9 @@ fun InScreenLockApp(
                     usageTotals = snapshot?.totals
                     appUsage = snapshot?.apps
                 }
-                if (selectedRoute == MainRoute.ANALYSIS && weekUsage == null && !weekLoading) {
-                    weekLoading = true
-                    weekError = false
-                    val result = runCatching { withContext(Dispatchers.IO) { usageReader.weekUsage() } }
-                    weekUsage = result.getOrNull()
-                    weekError = result.isFailure
-                    weekLoading = false
+                if (selectedRoute == MainRoute.ANALYSIS && (weekRefreshNeeded || weekAccessAtLoad != usageAvailable)) {
+                    weekRefreshNeeded = false
+                    loadWeek()
                 }
                 delay(REFRESH_INTERVAL_MS)
             }
@@ -291,11 +313,7 @@ fun InScreenLockApp(
                                 week = weekUsage, loading = weekLoading, failed = weekError,
                                 onRetry = {
                                     weekUsage = null
-                                    weekLoading = true
-                                    scope.launch {
-                                        val result = runCatching { withContext(Dispatchers.IO) { usageReader.weekUsage() } }
-                                        weekUsage = result.getOrNull(); weekError = result.isFailure; weekLoading = false
-                                    }
+                                    scope.launch { loadWeek() }
                                 },
                             )
                             MainRoute.LIMITS -> LimitsRoute(
