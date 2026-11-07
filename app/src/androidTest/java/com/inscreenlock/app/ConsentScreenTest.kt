@@ -101,7 +101,7 @@ class ConsentScreenTest {
         composeRule.onNodeWithTag("onboarding-skip").performClick()
         composeRule.onNodeWithText("Seu uso, no seu ritmo").assertIsDisplayed()
         composeRule.onNodeWithTag("accessibility-consent").performScrollTo().performClick()
-        composeRule.onNodeWithTag("consent-continue").performClick()
+        composeRule.onNodeWithTag("consent-continue").performScrollTo().performClick()
         composeRule.onAllNodesWithTag("onboarding-start").assertCountEquals(0)
         composeRule.onAllNodesWithText("Seu uso, no seu ritmo").assertCountEquals(0)
     }
