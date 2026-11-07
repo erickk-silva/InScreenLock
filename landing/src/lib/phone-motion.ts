@@ -1,5 +1,16 @@
-/** Approved hero pose: the phone shows its right edge (buttons) to the viewer, leaning like the reference. */
-export const INITIAL_POSE = { yaw: -17, pitch: 10, roll: -13 } as const;
+/**
+ * Approved hero pose (Euler order YXZ: tipped back by `pitch`, then spun about the vertical axis by `yaw`).
+ * The approved reference keeps the screen text horizontal while both long edges lean to the right; a rigid rotation cannot do that
+ * without a strong keystone, so the scene also applies a view-space lean (a shear of `LEAN_DEG`, like an off-axis camera).
+ */
+export const INITIAL_POSE = { yaw: -22, pitch: -8, roll: 0 } as const;
+/** View-space lean of the whole device, in degrees (top edge toward the right). */
+export const LEAN_DEG = 12;
+/** Release velocity is dropped when the pointer rested at least this long before lifting, so a still finger never flings the phone. */
+export const STILL_RELEASE_MS = 80;
+/** Degrees away from the home pose, normalised to [0, 360). Used for announcements so screen readers never hear "1085 graus". */
+export const degreesFromHome = (yaw: number, home: number = INITIAL_POSE.yaw) => ((Math.round(yaw - home) % 360) + 360) % 360;
+export const settleVelocity = (velocity: number, stillForMs: number) => (stillForMs > STILL_RELEASE_MS ? 0 : velocity);
 export const clampPitch = (pitch: number) => Math.max(-30, Math.min(30, pitch));
 export const applyDrag = (yaw: number, pitch: number, dx: number, dy: number) => ({
   yaw: yaw + dx * 0.55,

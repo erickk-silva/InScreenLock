@@ -1,20 +1,28 @@
 'use client';
 /* eslint-disable react-hooks/immutability -- Three.js render-loop pose is intentionally mutable to avoid React renders per frame. */
 
-import { Component, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Environment, Lightformer, RoundedBox, Text } from '@react-three/drei';
+import { Environment, Lightformer } from '@react-three/drei';
 import * as THREE from 'three';
-import { dampAngle, FINAL_FRAME, idleOffsets, INITIAL_POSE, INTRO, LIMIT_CROSS_MS, OFF_FRAME, releaseVelocity, ringTimeline, springSettled, stepSpring, type PhonePose, type ScreenFrame, type Spring } from '@/lib/phone-motion';
+import { dampAngle, FINAL_FRAME, idleOffsets, INITIAL_POSE, INTRO, LEAN_DEG, LIMIT_CROSS_MS, OFF_FRAME, releaseVelocity, ringTimeline, springSettled, stepSpring, type PhonePose, type ScreenFrame, type Spring } from '@/lib/phone-motion';
 import { drawPhoneScreen } from '@/lib/phone-screen';
+import { createBodyGeometry, createPlateGeometry, DISPLAY, GLASS, paintBackTexture, PHONE, Z } from './phone-geometry';
 
-const TEX_W = 720;
+const TEX_W = 788;
 const TEX_H = 1584;
-const FOV = 36;
-const CAMERA_Z = 9;
+const FOV = 44;
+const CAMERA_Z = 8.4;
+const CAMERA_NEAR = 4;
+const CAMERA_FAR = 22;
+/** The canvas is taller than the stage by this fraction on each side, so a rotated device is never cropped. */
+const CANVAS_PAD = 0.12;
+const VISIBLE_HEIGHT = 2 * CAMERA_Z * Math.tan(THREE.MathUtils.degToRad(FOV / 2));
+/** Phone height as a fraction of the stage height at rest (the approved hero shows the device about 95% of the stage). */
+const STAGE_FILL = 0.91;
 const smooth = (t: number) => { const x = Math.max(0, Math.min(1, t)); return x * x * (3 - 2 * x); };
 
-type SceneHooks = { onPose?: (yaw: number, pitch: number) => void; onLimit?: () => void; onIntroDone?: () => void };
+export type SceneHooks = { onPose?: (yaw: number, pitch: number) => void; onLimit?: () => void; onIntroDone?: () => void };
 
 /** The app screen is drawn in code on a canvas, so it can be alive (power on, ring sweep, counter) and always matches the poster. */
 function useScreenTexture() {
@@ -36,24 +44,47 @@ function useScreenTexture() {
   }, [screen]);
   return screen;
 }
+/** Offset of the device from the canvas centre, in units of the device scale. */
+const HOME_X = -0.12;
+const HOME_Y = 0.13;
 
-function Device({ pose, scaleFactor, onPose, onLimit, onIntroDone }: { pose: React.MutableRefObject<PhonePose>; scaleFactor: number } & SceneHooks) {
+/** Geometries and the back texture are created once per scene and disposed with it. */
+function useDeviceParts() {
+  const parts = useMemo(() => {
+    const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 1100;
+    const ctx = canvas.getContext('2d'); if (ctx) paintBackTexture(ctx, canvas.width, canvas.height);
+    const backTexture = new THREE.CanvasTexture(canvas); backTexture.colorSpace = THREE.SRGBColorSpace; backTexture.anisotropy = 8;
+    return { body: createBodyGeometry(), glass: createPlateGeometry(GLASS.width, GLASS.height, GLASS.corner), display: createPlateGeometry(DISPLAY.width, DISPLAY.height, DISPLAY.corner), back: createPlateGeometry(GLASS.width + 0.02, GLASS.height + 0.1, GLASS.corner + 0.02), island: createPlateGeometry(0.8, 0.88, 0.17), islandRim: createPlateGeometry(0.86, 0.94, 0.2), backTexture };
+  }, []);
+  useEffect(() => () => { parts.body.dispose(); parts.glass.dispose(); parts.display.dispose(); parts.back.dispose(); parts.island.dispose(); parts.islandRim.dispose(); parts.backTexture.dispose(); }, [parts]);
+  return parts;
+}
+
+function Device({ pose, onPose, onLimit, onIntroDone }: { pose: React.MutableRefObject<PhonePose> } & SceneHooks) {
+  const lean = useRef<THREE.Group>(null);
   const root = useRef<THREE.Group>(null);
   const screenGlow = useRef<THREE.PointLight>(null);
   const lastPoseReport = useRef(0);
   const intro = useRef({ ms: 0, frames: 0, wall: 0, yaw: { value: INTRO.yawOffset, velocity: 0 } as Spring, rise: { value: -INTRO.rise, velocity: 0 } as Spring, limit: false, done: false });
   const screen = useScreenTexture();
-  // uniform scale (no stretched phone); the stage tablet/mobile layouts use the lower end of each range
-  const scale = 0.95 + scaleFactor * 0.1;
-  const x = -0.1 - scaleFactor * 0.15;
-  const y = 0.1 + scaleFactor * 0.08;
+  const parts = useDeviceParts();
+  useEffect(() => {
+    const group = lean.current; if (!group) return;
+    group.matrixAutoUpdate = false;
+    group.matrix.set(1, Math.tan(THREE.MathUtils.degToRad(LEAN_DEG)), 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+    group.matrixWorldNeedsUpdate = true;
+  }, []);
   useFrame((state, rawDelta) => {
     if (!root.current) return;
     const p = pose.current; const it = intro.current;
     const delta = Math.min(rawDelta, 0.05);
     const wall = performance.now();
     const wallDelta = Math.min(wall - (it.wall || wall), 250) / 1000; // the choreography follows real time, but one hitch (shader compile, tab switch) never skips more than 250 ms
-    const unitPerPx = (2 * CAMERA_Z * Math.tan(THREE.MathUtils.degToRad(FOV / 2))) / state.size.height;
+    const unitPerPx = VISIBLE_HEIGHT / state.size.height;
+    // uniform scale from the canvas size: the device fills STAGE_FILL of the stage height, and never more than the width allows
+    const heightFit = (STAGE_FILL * VISIBLE_HEIGHT) / ((1 + CANVAS_PAD * 2) * PHONE.height);
+    const widthFit = (0.94 * VISIBLE_HEIGHT * (state.size.width / state.size.height)) / 4.2;
+    const scale = Math.min(heightFit, widthFit);
     root.current.scale.setScalar(scale);
 
     // ---- entrance: rise + yaw spring, then screen power-on / ring sweep / counter ----
@@ -101,8 +132,8 @@ function Device({ pose, scaleFactor, onPose, onLimit, onIntroDone }: { pose: Rea
       }
     }
 
-    root.current.position.set(x, y + it.rise.value + p.floatY * unitPerPx, 0);
-    root.current.rotation.set(THREE.MathUtils.degToRad(p.pitch), THREE.MathUtils.degToRad(p.yaw + it.yaw.value), THREE.MathUtils.degToRad(p.roll));
+    root.current.position.set(HOME_X * scale, HOME_Y * scale + it.rise.value + p.floatY * unitPerPx, 0);
+    root.current.rotation.set(THREE.MathUtils.degToRad(p.pitch), THREE.MathUtils.degToRad(p.yaw + it.yaw.value), THREE.MathUtils.degToRad(p.roll), 'YXZ');
 
     // moving key light: the glossy edge highlights follow the pointer, and the rotation sweeps the reflections
     const key = state.scene.getObjectByName('key-light');
@@ -113,80 +144,61 @@ function Device({ pose, scaleFactor, onPose, onLimit, onIntroDone }: { pose: Rea
       onPose?.(p.yaw + it.yaw.value, p.pitch);
     }
   });
-  return <group ref={root} position={[x, y, 0]} scale={scale} rotation={[THREE.MathUtils.degToRad(INITIAL_POSE.pitch), THREE.MathUtils.degToRad(INITIAL_POSE.yaw), THREE.MathUtils.degToRad(INITIAL_POSE.roll)]}>
+  const frameMetal = { color: '#3a444f', metalness: 1, roughness: 0.27, clearcoat: 0.35, clearcoatRoughness: 0.22, envMapIntensity: 1.6 } as const;
+  const bright = { color: '#6b7783', metalness: 1, roughness: 0.2, envMapIntensity: 1.8 } as const;
+  const shell = parts.body;
+  return <group ref={lean}><group ref={root} rotation={[THREE.MathUtils.degToRad(INITIAL_POSE.pitch), THREE.MathUtils.degToRad(INITIAL_POSE.yaw), THREE.MathUtils.degToRad(INITIAL_POSE.roll), 'YXZ']}>
     <pointLight ref={screenGlow} position={[0, 0.2, 1.1]} intensity={0} distance={3.2} color="#22e3b0" />
-    <RoundedBox args={[2.35, 5.08, 0.24]} radius={0.22} smoothness={8}>
-      <meshPhysicalMaterial color="#303842" metalness={0.82} roughness={0.24} clearcoat={0.8} clearcoatRoughness={0.16} />
-    </RoundedBox>
-    <RoundedBox args={[2.29, 5.00, 0.12]} radius={0.205} smoothness={8} position={[0, 0, 0.10]}>
-      <meshStandardMaterial color="#080c11" metalness={0.35} roughness={0.2} />
-    </RoundedBox>
-    <RoundedBox args={[2.23, 4.87, 0.035]} radius={0.19} smoothness={8} position={[0, 0.01, 0.169]}>
-      <meshPhysicalMaterial color="#4e5965" metalness={0.92} roughness={0.18} clearcoat={0.85} clearcoatRoughness={0.1} />
-    </RoundedBox>
-    <RoundedBox args={[2.17, 4.77, 0.025]} radius={0.18} smoothness={8} position={[0, 0.01, 0.192]}>
-      <meshStandardMaterial color="#080c11" metalness={0.12} roughness={0.28} />
-    </RoundedBox>
-    <mesh position={[0, 0.01, 0.208]}>
-      <planeGeometry args={[2.12, 4.66]} />
-      <meshBasicMaterial map={screen.texture} toneMapped={false} side={THREE.FrontSide} />
-    </mesh>
-    <mesh position={[0, 0.01, 0.210]}>
-      <planeGeometry args={[2.1, 4.63]} />
-      <meshPhysicalMaterial color="#ffffff" transparent opacity={0.06} metalness={0.05} roughness={0.1} clearcoat={1} clearcoatRoughness={0.06} envMapIntensity={1.6} depthWrite={false} />
-    </mesh>
-    <RoundedBox args={[0.24, 0.105, 0.018]} radius={0.052} smoothness={8} position={[0, 2.245, 0.215]}>
-      <meshBasicMaterial color="#03070b" />
-    </RoundedBox>
-    <mesh position={[0.075, 2.245, 0.226]}>
-      <circleGeometry args={[0.027, 24]} />
-      <meshBasicMaterial color="#182b37" />
-    </mesh>
-    <RoundedBox args={[2.33, 5.05, 0.13]} radius={0.22} smoothness={8} position={[0, 0, -0.10]}>
-      <meshStandardMaterial color="#171d24" metalness={0.82} roughness={0.29} />
-    </RoundedBox>
-    <group position={[0.62, 1.72, -0.18]}>
-      <RoundedBox args={[0.72, 0.76, 0.09]} radius={0.13} smoothness={6}>
-        <meshPhysicalMaterial color="#303943" metalness={0.78} roughness={0.2} clearcoat={0.75} />
-      </RoundedBox>
-      {[-0.18, 0.18].map((x) => <mesh key={x} position={[x, 0, 0.05]}>
-        <cylinderGeometry args={[0.1, 0.1, 0.025, 24]} />
-        <meshStandardMaterial color="#090d11" metalness={0.2} roughness={0.2} />
-      </mesh>)}
-      <Text position={[0, -0.27, 0.05]} fontSize={0.08} color="#aab5c0" anchorX="center">INSCREEN</Text>
+    <mesh geometry={shell}><meshPhysicalMaterial {...frameMetal} /></mesh>
+    {/* front: black glass with a thin bezel, the live display, a faint reflection layer and the circular punch-hole camera */}
+    <mesh geometry={parts.glass} position={[0, 0, Z.glass]}><meshPhysicalMaterial color="#04070a" metalness={0.15} roughness={0.14} clearcoat={1} clearcoatRoughness={0.05} polygonOffset polygonOffsetFactor={-1} /></mesh>
+    <mesh geometry={parts.display} position={[0, DISPLAY.y, Z.display]}><meshBasicMaterial map={screen.texture} toneMapped={false} side={THREE.FrontSide} polygonOffset polygonOffsetFactor={-2} /></mesh>
+    <mesh geometry={parts.display} position={[0, DISPLAY.y, Z.sheen]}><meshPhysicalMaterial color="#ffffff" transparent opacity={0.05} metalness={0.05} roughness={0.08} clearcoat={1} clearcoatRoughness={0.05} envMapIntensity={1.7} depthWrite={false} polygonOffset polygonOffsetFactor={-3} /></mesh>
+    <mesh position={[0, DISPLAY.height / 2 - 0.085, Z.hole]}><circleGeometry args={[0.052, 32]} /><meshBasicMaterial color="#010203" polygonOffset polygonOffsetFactor={-5} /></mesh>
+    <mesh position={[0, DISPLAY.height / 2 - 0.085, Z.hole - 0.0003]}><ringGeometry args={[0.052, 0.066, 32]} /><meshStandardMaterial color="#3d4852" metalness={0.9} roughness={0.3} polygonOffset polygonOffsetFactor={-5} /></mesh>
+    <mesh position={[0.012, DISPLAY.height / 2 - 0.095, Z.hole + 0.0004]}><circleGeometry args={[0.012, 16]} /><meshBasicMaterial color="#1b3340" polygonOffset polygonOffsetFactor={-6} /></mesh>
+    {/* back: textured glass panel and the camera module (a different face, never a mirrored screen) */}
+    <mesh geometry={parts.back} position={[0, 0, Z.back]} rotation={[0, Math.PI, 0]}><meshPhysicalMaterial map={parts.backTexture} color="#ffffff" metalness={0.25} roughness={0.38} clearcoat={0.8} clearcoatRoughness={0.2} envMapIntensity={1.0} /></mesh>
+    <group position={[0.5, 1.78, Z.back - 0.0015]} rotation={[0, Math.PI, 0]}>
+      <mesh geometry={parts.islandRim} position={[0, 0, 0.004]}><meshStandardMaterial color="#9aa6b3" metalness={1} roughness={0.25} envMapIntensity={1.4} /></mesh>
+      <mesh geometry={parts.island} position={[0, 0, 0.012]}><meshPhysicalMaterial color="#2c353f" metalness={0.7} roughness={0.28} clearcoat={0.9} polygonOffset polygonOffsetFactor={-1} /></mesh>
+      {[0.2, -0.2].map((y) => <group key={y} position={[0, y, 0.026]}>
+        <mesh rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.15, 0.15, 0.03, 40]} /><meshStandardMaterial color="#8d99a6" metalness={1} roughness={0.22} /></mesh>
+        <mesh position={[0, 0, 0.017]} rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.112, 0.112, 0.012, 40]} /><meshStandardMaterial color="#070b10" metalness={0.4} roughness={0.08} /></mesh>
+        <mesh position={[-0.03, 0.03, 0.024]}><circleGeometry args={[0.032, 20]} /><meshBasicMaterial color="#2b4a5c" /></mesh>
+      </group>)}
+      <mesh position={[0.24, 0.3, 0.025]}><circleGeometry args={[0.045, 20]} /><meshStandardMaterial color="#d9e2ea" emissive="#fff7df" emissiveIntensity={0.25} /></mesh>
     </group>
-    <mesh position={[0, 0, -0.18]}><circleGeometry args={[0.11, 32]} /><meshStandardMaterial color="#313a43" metalness={0.8} /></mesh>
-    <mesh position={[1.19, 0.95, 0]}><boxGeometry args={[0.09, 0.53, 0.12]} /><meshPhysicalMaterial color="#56616d" metalness={0.92} roughness={0.16} clearcoat={0.85} /></mesh>
-    <mesh position={[1.19, 0.28, 0]}><boxGeometry args={[0.09, 0.34, 0.12]} /><meshPhysicalMaterial color="#56616d" metalness={0.92} roughness={0.16} clearcoat={0.85} /></mesh>
-    <mesh position={[-1.19, 0.75, 0]}><boxGeometry args={[0.09, 0.42, 0.12]} /><meshPhysicalMaterial color="#56616d" metalness={0.92} roughness={0.16} clearcoat={0.85} /></mesh>
-  </group>;
+    {/* side keys on the right edge, where the specular highlight lives */}
+    <mesh position={[PHONE.width / 2 + 0.006, 0.95, 0]}><boxGeometry args={[0.04, 0.52, 0.085]} /><meshPhysicalMaterial {...bright} /></mesh>
+    <mesh position={[PHONE.width / 2 + 0.006, 0.28, 0]}><boxGeometry args={[0.04, 0.34, 0.085]} /><meshPhysicalMaterial {...bright} /></mesh>
+    <mesh position={[-PHONE.width / 2 - 0.004, 0.8, 0]}><boxGeometry args={[0.03, 0.4, 0.07]} /><meshPhysicalMaterial {...bright} /></mesh>
+  </group></group>;
 }
 
-function SceneContent({ pose, scaleFactor, ...hooks }: { pose: React.MutableRefObject<PhonePose>; scaleFactor: number } & SceneHooks) {
+function SceneContent({ pose, ...hooks }: { pose: React.MutableRefObject<PhonePose> } & SceneHooks) {
   const { invalidate } = useThree();
   useEffect(() => { invalidate(); }, [invalidate]);
   return <>
-    <ambientLight intensity={1.15} />
-    <directionalLight name="key-light" position={[5, 5, 6]} intensity={3.1} color="#e7fff9" />
+    <ambientLight intensity={1.0} />
+    <directionalLight name="key-light" position={[5, 5, 6]} intensity={3.0} color="#e7fff9" />
     <pointLight position={[-4, 1, 2]} intensity={32} color="#19d9ae" distance={9} />
     <pointLight position={[3, -4, -2]} intensity={20} color="#15b891" distance={8} />
-    <Device pose={pose} scaleFactor={scaleFactor} {...hooks} />
+    <Device pose={pose} {...hooks} />
     <Environment resolution={64} frames={1} background={false}>
-      <Lightformer form="rect" intensity={2.4} color="#dcfff7" scale={[8, 8, 1]} position={[0, 5, -5]} />
+      <Lightformer form="rect" intensity={2.2} color="#dcfff7" scale={[8, 8, 1]} position={[0, 5, -5]} />
       <Lightformer form="rect" intensity={1.8} color="#21dcb4" scale={[5, 8, 1]} position={[-5, 0, -3]} />
+      <Lightformer form="rect" intensity={9} color="#ffffff" scale={[2.2, 11, 1]} position={[7, 0.5, -4.5]} />
+      <Lightformer form="rect" intensity={4} color="#e6fff9" scale={[1.4, 8, 1]} position={[6.5, 0, 0.5]} />
+      <Lightformer form="rect" intensity={3.2} color="#bfe9ff" scale={[1.2, 7, 1]} position={[-6, 1, 2]} />
       <Lightformer form="ring" intensity={1.2} color="#a2b1c2" scale={[4, 4, 1]} position={[5, 2, -4]} />
     </Environment>
   </>;
 }
 
-class CanvasFallback extends Component<{ children: React.ReactNode; onFailure?: () => void }, { failed: boolean }> {
-  state = { failed: false };
-  static getDerivedStateFromError() { return { failed: true }; }
-  componentDidCatch() { this.props.onFailure?.(); }
-  render() { return this.state.failed ? null : this.props.children; }
-}
+export type PhoneSceneProps = { pose: React.MutableRefObject<PhonePose>; active?: boolean; onFailure?: () => void; onReady?: () => void } & SceneHooks;
 
-export default function PhoneScene({ pose, scaleFactor, active = true, onFailure, onReady, ...hooks }: { pose: React.MutableRefObject<PhonePose>; scaleFactor: number; active?: boolean; onFailure?: () => void; onReady?: () => void } & SceneHooks) {
+export default function PhoneScene({ pose, active = true, onFailure, onReady, ...hooks }: PhoneSceneProps) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const lost = useCallback((event: Event) => { event.preventDefault(); onFailure?.(); }, [onFailure]);
   const created = useCallback((state: { gl: THREE.WebGLRenderer }) => {
@@ -195,7 +207,7 @@ export default function PhoneScene({ pose, scaleFactor, active = true, onFailure
     onReady?.();
   }, [lost, onReady]);
   useEffect(() => () => canvas.current?.removeEventListener('webglcontextlost', lost), [lost]);
-  return <CanvasFallback onFailure={onFailure}><Canvas onCreated={created} camera={{ position: [0, 0, CAMERA_Z], fov: FOV }} dpr={[1, 1.5]} frameloop={active ? 'always' : 'never'} gl={{ antialias: true, alpha: true, powerPreference: 'low-power' }}>
-    <SceneContent pose={pose} scaleFactor={scaleFactor} {...hooks} />
-  </Canvas></CanvasFallback>;
+  return <Canvas onCreated={created} camera={{ position: [0, 0, CAMERA_Z], fov: FOV, near: CAMERA_NEAR, far: CAMERA_FAR }} dpr={[1, 1.5]} frameloop={active ? 'always' : 'never'} gl={{ antialias: true, alpha: true, powerPreference: 'low-power' }}>
+    <SceneContent pose={pose} {...hooks} />
+  </Canvas>;
 }

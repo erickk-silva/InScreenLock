@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
 import { prefersReducedMotion } from '@/lib/motion-preference';
 
-/** Becomes true after `ms` (immediately when motion is reduced). Used to stage the entrance timeline of React Bits text effects. */
-export function useAfter(ms: number) {
-  const [ready, setReady] = useState(false);
+/**
+ * Stage of a text entrance: `pending` (server HTML and first client render, copy is plain and visible unless `.js-motion` hides it)
+ * or `motion` (after `ms`, the React Bits effect takes over). With reduced motion it never leaves `pending`, so the plain copy stays and nothing animates.
+ */
+export function useMotionStage(ms: number): 'pending' | 'motion' {
+  const [stage, setStage] = useState<'pending' | 'motion'>('pending');
   useEffect(() => {
-    const timer = window.setTimeout(() => setReady(true), prefersReducedMotion() ? 0 : ms);
+    if (prefersReducedMotion()) return undefined;
+    const timer = window.setTimeout(() => setStage('motion'), ms);
     return () => window.clearTimeout(timer);
   }, [ms]);
-  return ready;
+  return stage;
 }

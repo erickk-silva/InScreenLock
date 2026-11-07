@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applyDrag, clampPitch, dampAngle, easeOutCubic, FINAL_FRAME, GOAL_MINUTES, idleOffsets, IDLE, INITIAL_POSE, INTRO,
-  LIMIT_CROSS_MS, nearestEquivalentYaw, releaseVelocity, ringTimeline, springSettled, stepSpring, TOTAL_MINUTES, type Spring,
+  applyDrag, clampPitch, dampAngle, easeOutCubic, FINAL_FRAME, GOAL_MINUTES, idleOffsets, IDLE, INITIAL_POSE, INTRO, LEAN_DEG,
+  LIMIT_CROSS_MS, degreesFromHome, nearestEquivalentYaw, settleVelocity, STILL_RELEASE_MS, releaseVelocity, ringTimeline, springSettled, stepSpring, TOTAL_MINUTES, type Spring,
 } from '@/lib/phone-motion';
 
 describe('phone rotation math', () => {
-  it('keeps the approved pose as the initial orientation', () => expect(INITIAL_POSE).toEqual({ yaw: -17, pitch: 10, roll: -13 }));
+  it('keeps the approved pose as the initial orientation', () => expect(INITIAL_POSE).toEqual({ yaw: -22, pitch: -8, roll: 0 }));
+  it('leans the device to the right, like the approved reference', () => expect(LEAN_DEG).toBeGreaterThan(8));
   it('allows continuous yaw over multiple rotations', () => expect(applyDrag(359, 0, 1000, 0).yaw).toBeGreaterThan(719));
   it('clamps only pitch at both ends', () => {
     expect(clampPitch(90)).toBe(30); expect(clampPitch(-90)).toBe(-30);
@@ -19,6 +20,21 @@ describe('phone rotation math', () => {
     expect(nearestEquivalentYaw(INITIAL_POSE.yaw + 720 + 40)).toBe(INITIAL_POSE.yaw + 720);
     expect(nearestEquivalentYaw(INITIAL_POSE.yaw - 700)).toBe(INITIAL_POSE.yaw - 720);
     expect(nearestEquivalentYaw(INITIAL_POSE.yaw + 12)).toBe(INITIAL_POSE.yaw);
+  });
+});
+
+describe('announcements and release', () => {
+  it('reports the angle from home in 0-359, never a raw accumulated value', () => {
+    expect(degreesFromHome(INITIAL_POSE.yaw)).toBe(0);
+    expect(degreesFromHome(INITIAL_POSE.yaw + 480)).toBe(120);
+    expect(degreesFromHome(INITIAL_POSE.yaw - 30)).toBe(330);
+    expect(degreesFromHome(INITIAL_POSE.yaw + 1085)).toBeLessThan(360);
+  });
+  it('drops the release velocity when the pointer rested before lifting', () => {
+    expect(settleVelocity(900, 10)).toBe(900);
+    expect(settleVelocity(900, STILL_RELEASE_MS)).toBe(900);
+    expect(settleVelocity(900, STILL_RELEASE_MS + 1)).toBe(0);
+    expect(settleVelocity(-900, 1500)).toBe(0);
   });
 });
 

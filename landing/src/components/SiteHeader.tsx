@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { Menu } from 'lucide-react';
 import { AndroidGlyph, BrandMark } from './HeroGlyphs';
 
-const links = [['Como funciona', '#como-funciona'], ['Recursos', '#recursos'], ['Privacidade', '#privacidade'], ['FAQ', '#faq']];
+/** Until the content sections of phase P3 exist, every link lands on a section that is visible today: the demo, the privacy note or the download block. */
+const links = [['Como funciona', '#demo'], ['Recursos', '#demo'], ['Privacidade', '#privacidade'], ['FAQ', '#download']];
 
 /** Entrance slide on load; turns into frosted glass with a hairline border once the page scrolls past 8 px. */
 export default function SiteHeader() {
@@ -18,10 +19,10 @@ export default function SiteHeader() {
   }, []);
   return <div className={`site-header-bar${scrolled ? ' is-scrolled' : ''}`} data-scrolled={scrolled}>
     <header className="site-header"><a className="brand" href="#inicio" aria-label="InScreenLock — início"><BrandMark/><span>InScreenLock</span></a>
-      <nav className="desktop-nav" aria-label="Navegação principal">{links.map(([label, href]) => <a key={href} href={href}>{label}</a>)}</nav>
-      <a className="header-download" href="#download"><AndroidGlyph size={22}/> Baixar app</a>
+      <div className="header-right"><nav className="desktop-nav" aria-label="Navegação principal">{links.map(([label, href]) => <a key={label} href={href}>{label}</a>)}</nav>
+      <a className="header-download" href="#download"><AndroidGlyph size={22}/> Baixar app</a></div>
       <button className="menu-toggle" aria-label={open ? 'Fechar menu' : 'Abrir menu'} aria-expanded={open} aria-controls="mobile-navigation" onClick={() => setOpen(!open)}><Menu size={24}/></button>
-      {open && <nav className="mobile-nav" id="mobile-navigation" aria-label="Navegação móvel">{links.map(([label, href]) => <a key={href} href={href} onClick={() => setOpen(false)}>{label}</a>)}<a href="#download" onClick={() => setOpen(false)}>Baixar app</a></nav>}
+      {open && <nav className="mobile-nav" id="mobile-navigation" aria-label="Navegação móvel">{links.map(([label, href]) => <a key={label} href={href} onClick={() => setOpen(false)}>{label}</a>)}<a href="#download" onClick={() => setOpen(false)}>Baixar app</a></nav>}
     </header>
   </div>;
 }
