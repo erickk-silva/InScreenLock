@@ -311,10 +311,7 @@ fun InScreenLockApp(
                                 todayAvailable = usageAvailable && usageTotals != null,
                                 usageAccessGranted = usageAvailable,
                                 week = weekUsage, loading = weekLoading, failed = weekError,
-                                onRetry = {
-                                    weekUsage = null
-                                    scope.launch { loadWeek() }
-                                },
+                                onRetry = { if (!weekInFlight) scope.launch { loadWeek() } },
                             )
                             MainRoute.LIMITS -> LimitsRoute(
                                 modifier = Modifier.padding(insets), settings = settings,
@@ -375,13 +372,18 @@ internal fun FirstLaunchFlow(consentAccepted: Boolean, onAccept: () -> Unit) {
 
 @Composable
 internal fun SplashLoadingScreen(modifier: Modifier = Modifier) {
-    val progressTransition = rememberInfiniteTransition(label = "splash-progress")
-    val visibleProgress by progressTransition.animateFloat(
-        initialValue = 0.18f,
-        targetValue = 0.82f,
-        animationSpec = infiniteRepeatable(animation = tween(durationMillis = 900, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
-        label = "splash-progress-segment",
-    )
+    val animationsEnabled = systemAnimationsEnabled(LocalContext.current)
+    val visibleProgress = if (animationsEnabled) {
+        val progressTransition = rememberInfiniteTransition(label = "splash-progress")
+        progressTransition.animateFloat(
+            initialValue = 0.18f,
+            targetValue = 0.82f,
+            animationSpec = infiniteRepeatable(animation = tween(durationMillis = 900, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
+            label = "splash-progress-segment",
+        ).value
+    } else {
+        0.5f
+    }
     Box(
         modifier.fillMaxSize().background(Brush.radialGradient(listOf(Color(0x3322E3B0), Background, Background), center = Offset.Zero, radius = 760f)),
         contentAlignment = Alignment.Center,
@@ -924,7 +926,7 @@ internal fun AnalysisScreen(
             AppBreakdownCard("TikTok", if (todayAvailable) todayTotals?.tiktokMs else null)
             if (!todayAvailable) StatusBanner(if (usageAccessGranted) "O Android não disponibilizou o histórico de hoje agora." else "Conceda Acesso de uso nas configurações do Android e tente novamente.", BannerLevel.WARNING, title = "Indisponível")
         } else when {
-            loading -> StatusBanner("Consultando os últimos sete dias no Android…", BannerLevel.INFO, title = "Carregando")
+            shouldShowWeekLoading(week, loading, failed) -> StatusBanner("Consultando os últimos sete dias no Android…", BannerLevel.INFO, title = "Carregando")
             failed || week == null -> StatusBanner("Não foi possível consultar o histórico semanal.", BannerLevel.WARNING, title = "Erro ao carregar", actionLabel = "Tentar novamente", onAction = onRetry)
             week.days.none { it.available } && !usageAccessGranted -> StatusBanner("Conceda Acesso de uso nas configurações do Android para consultar a semana.", BannerLevel.WARNING, title = "Acesso de uso necessário")
             week.days.none { it.available } -> StatusBanner("O Android não forneceu eventos para os últimos sete dias.", BannerLevel.WARNING, title = "Sem dados semanais")
@@ -937,6 +939,9 @@ internal fun AnalysisScreen(
         Spacer(Modifier.height(24.dp))
     }
 }
+
+internal fun shouldShowWeekLoading(week: WeekUsage?, loading: Boolean, failed: Boolean): Boolean =
+    loading || (week == null && !failed)
 
 @Composable
 private fun WeeklyBars(week: WeekUsage) {
