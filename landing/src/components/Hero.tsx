@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import { ArrowDown, ArrowRight, CircleAlert, CirclePlay, Layers3, MegaphoneOff, ShieldCheck } from 'lucide-react';
+import { ArrowDown, ArrowRight, CircleAlert, CirclePlay, Info, Layers3, MegaphoneOff, ShieldCheck } from 'lucide-react';
 import SplitText from './react-bits/SplitText';
 import BlurText from './react-bits/BlurText';
 import ShinyText from './react-bits/ShinyText';
@@ -88,11 +88,14 @@ export default function Hero() {
           <Magnet disabled={!finePointer} maxOffset={4} magnetStrength={9} padding={25} wrapperClassName="magnet-wrap"><a className="button button-secondary" href="#demo"><span className="play-icon"><CirclePlay size={37}/></span>Ver demonstração</a></Magnet>
         </AnimatedContent>
         {release.status === 'preparing' && <p className="release-note enter" style={delayed(1050)}>Download em preparação. O APK será publicado após verificação.</p>}
-        <AnimatedContent className="benefits" trigger="mount" distance={10} duration={.6} delay={1.1} stagger={.07}>
-          <span className="benefit"><ShieldCheck aria-hidden="true"/>Sem conta</span><span className="benefit-dot" aria-hidden="true">•</span>
-          <span className="benefit"><MegaphoneOff aria-hidden="true"/>Sem anúncios</span><span className="benefit-dot" aria-hidden="true">•</span>
-          <span className="benefit"><Layers3 aria-hidden="true"/>100% local</span>
-        </AnimatedContent>
+        <div className="benefits-wrap">
+          <AnimatedContent className="benefits" trigger="mount" distance={10} duration={.6} delay={1.1} stagger={.07} aria-describedby="benefits-caveat">
+            <span className="benefit"><ShieldCheck aria-hidden="true"/>Sem conta</span><span className="benefit-dot" aria-hidden="true">•</span>
+            <span className="benefit"><MegaphoneOff aria-hidden="true"/>Sem anúncios</span><span className="benefit-dot" aria-hidden="true">•</span>
+            <span className="benefit"><Layers3 aria-hidden="true"/>100% local</span><Info className="benefits-info" size={16} aria-hidden="true"/>
+          </AnimatedContent>
+          <p className="benefits-caveat" id="benefits-caveat">Verificado no APK assinado 1.0.0: sem permissão de internet e sem SDK de anúncios; o tempo de uso vem do histórico do Android e fica no aparelho. <a href="#privacidade">Detalhes em Privacidade.</a></p>
+        </div>
       </section>
       <section className="phone-stage" id="demo-phone" aria-label="Demonstração do aplicativo">
         <div className="phone-layer phone-layer-far" data-parallax="4" aria-hidden="true"><div className="phone-halo"/><div className="phone-floor"/></div>

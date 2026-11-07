@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Environment, Lightformer } from '@react-three/drei';
 import * as THREE from 'three';
-import { dampAngle, FINAL_FRAME, idleOffsets, clampPitch, INITIAL_POSE, INTRO, LIMIT_CROSS_MS, OFF_FRAME, releaseVelocity, ringTimeline, springSettled, stepSpring, type PhonePose, type ScreenFrame, type Spring } from '@/lib/phone-motion';
+import { dampAngle, FINAL_FRAME, IDLE, clampPitch, INITIAL_POSE, INTRO, LIMIT_CROSS_MS, OFF_FRAME, releaseVelocity, ringTimeline, springSettled, stepSpring, type PhonePose, type ScreenFrame, type Spring } from '@/lib/phone-motion';
 import { drawPhoneScreen } from '@/lib/phone-screen';
 import { createBodyGeometry, createPlateGeometry, DISPLAY, GLASS, paintBackTexture, PHONE, Z } from './phone-geometry';
 
@@ -127,10 +127,10 @@ function Device({ pose, onPose, onLimit, onIntroDone }: { pose: React.MutableRef
     // ---- idle float (pauses on first hover/touch, keeps whatever offset it had) ----
     if (!p.hasInteracted && !p.reducedMotion) {
       const ramp = smooth((it.ms - 900) / 1200); // idle fades in while the entrance settles
-      const idle = idleOffsets(state.clock.elapsedTime);
-      p.yaw = INITIAL_POSE.yaw + idle.yaw * ramp;
-      p.pitch = INITIAL_POSE.pitch + idle.pitch * ramp;
-      p.floatY = idle.y * ramp;
+      const seconds = state.clock.elapsedTime;
+      p.yaw = INITIAL_POSE.yaw + Math.sin(seconds * 0.34) * IDLE.yawDeg * ramp;
+      p.pitch = INITIAL_POSE.pitch + Math.sin(seconds * 0.22) * IDLE.pitchDeg * ramp;
+      p.floatY = Math.sin((seconds * Math.PI * 2) / IDLE.floatPeriodS) * IDLE.floatPx * ramp;
     } else {
       const snap = p.recentering;
       const dt = Math.min(rawDelta, snap ? 0.1 : 0.04);

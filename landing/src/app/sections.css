@@ -23,8 +23,9 @@
 .story-controls { display: flex; align-items: center; justify-content: space-between; margin-top: 28px; }
 .story-controls > div:last-child { display: flex; gap: 8px; }
 .story-dots { display: flex; gap: 8px; }
-.story-dots button { width: 28px; height: 12px; border: 0; border-radius: 999px; background: #39424c; cursor: pointer; transition: width .3s ease, background .3s ease; }
-.story-dots button[aria-current="step"] { width: 44px; background: var(--color-primary); }
+.story-dots button { width: 44px; height: 44px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 999px; background: transparent; cursor: pointer; }
+.story-dots button::before { content: ""; width: 28px; height: 12px; border-radius: 999px; background: #39424c; transition: width .3s ease, background .3s ease; }
+.story-dots button[aria-current="step"]::before { width: 44px; background: var(--color-primary); }
 .story-controls > div:last-child button { width: 44px; height: 44px; display: grid; place-items: center; color: #dfe8ed; border: 1px solid rgba(255,255,255,.14); border-radius: 50%; background: rgba(255,255,255,.04); cursor: pointer; }
 .story-controls button:disabled { opacity: .36; cursor: not-allowed; }
 .demo-lab { padding-top: 112px; }
@@ -59,7 +60,7 @@
 .pin-dots span { width: 12px; height: 12px; border: 1px solid #63707d; border-radius: 50%; }
 .pin-dots span.filled { border-color: var(--color-primary); background: var(--color-primary); box-shadow: 0 0 14px rgba(34,227,176,.55); }
 .demo-keypad { width: min(100%, 250px); display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin: 0 auto; }
-.demo-keypad button { min-height: 40px; color: #dbe2e9; border: 1px solid rgba(255,255,255,.07); border-radius: 12px; background: rgba(255,255,255,.045); font: 600 14px Inter,sans-serif; cursor: pointer; }
+.demo-keypad button { min-height: 44px; color: #dbe2e9; border: 1px solid rgba(255,255,255,.07); border-radius: 12px; background: rgba(255,255,255,.045); font: 600 14px Inter,sans-serif; cursor: pointer; }
 .demo-keypad button:hover { border-color: rgba(34,227,176,.48); background: rgba(34,227,176,.08); }
 .demo-warning { display: flex; align-items: flex-start; gap: 7px; margin: 13px 0 0; color: #92a0ad; font: 11px/1.4 Roboto,sans-serif; }
 .demo-warning svg { flex: none; color: var(--color-primary); }

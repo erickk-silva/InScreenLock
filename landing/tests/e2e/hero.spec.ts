@@ -220,14 +220,14 @@ const mobilePage = async (page: Page, url = 'http://127.0.0.1:3100/?visualTest=1
   return { context, mobile };
 };
 
-test('E2E-04 horizontal swipe over the phone rotates it on mobile', async ({ page }) => {
+test('E2E-04 horizontal swipe with a vertical component rotates and pitches the phone on mobile', async ({ page }) => {
   const { context, mobile } = await mobilePage(page);
   const phone = mobile.getByTestId('phone'); await phone.scrollIntoViewIfNeeded(); await live(phone);
   const box = await phone.boundingBox(); if (!box) throw new Error('phone missing');
   expect(Math.abs((await yawOf(phone)) - HOME_YAW)).toBeLessThan(3.5); // home pose plus the subtle idle drift
-  await swipe(mobile, [box.x + box.width / 2 - 60, box.y + box.height / 2], [box.x + box.width / 2 + 100, box.y + box.height / 2]);
+  await swipe(mobile, [box.x + box.width / 2 - 60, box.y + box.height / 2 - 40], [box.x + box.width / 2 + 100, box.y + box.height / 2 + 40]);
   await expect.poll(() => yawOf(phone)).toBeGreaterThan(HOME_YAW + 20);
-  expect(Math.abs((await pitchOf(phone)) - HOME_PITCH)).toBeLessThan(1.5); // touch never changes the pitch: vertical gestures belong to the page (the keyboard covers it)
+  await expect.poll(() => pitchOf(phone)).toBeGreaterThan(HOME_PITCH + 15);
   await context.close();
 });
 
@@ -243,6 +243,17 @@ test('E2E-04b vertical swipe over the phone scrolls the page instead of rotating
   expect(Math.abs((await yawOf(phone)) - yawBefore)).toBeLessThan(4); // a rotation by the swipe would be tens of degrees; only the idle drift (about 2 deg) may remain
   expect(Math.abs((await pitchOf(phone)) - pitchBefore)).toBeLessThan(1.5);
   await context.close();
+});
+
+test('E2E-09b primary interactive targets are at least 44 by 44 CSS pixels', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 }); await page.goto('/?visualTest=1');
+  const targets = page.locator('.header-download, .menu-toggle, .hero-actions a, .story-dots button, .story-controls > div:last-child button, .demo-keypad button, .faq-item button');
+  await expect(page.locator('.hero-actions a').first()).toBeVisible();
+  const sizes = await targets.evaluateAll((nodes) => nodes.filter((node) => getComputedStyle(node).display !== 'none').map((node) => {
+    const rect = node.getBoundingClientRect(); return { label: node.getAttribute('aria-label') || node.textContent?.trim(), width: rect.width, height: rect.height };
+  }));
+  expect(sizes.length).toBeGreaterThan(10);
+  expect(sizes.filter(({ width, height }) => width < 44 || height < 44)).toEqual([]);
 });
 
 test('E2E-05 page scrolling remains available outside the phone', async ({ page }) => {

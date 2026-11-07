@@ -16,7 +16,7 @@ const DOUBLE_TAP_MS = 320;
 const KEY_ANNOUNCE_MS = 1000;
 
 type Tap = { at: number; x: number; y: number };
-type Drag = { id: number; x: number; y: number; at: number; travelled: number; touch: boolean; announced: boolean };
+type Drag = { id: number; x: number; y: number; startX: number; startY: number; at: number; travelled: number; touch: boolean; axis: 'pending' | 'horizontal' | 'vertical'; announced: boolean };
 
 /** Any failure inside the 3D scene (render error, shader, bad context) falls back to the poster instead of taking the page down. */
 class SceneBoundary extends Component<{ children: ReactNode; onFailure: () => void }, { failed: boolean }> {
@@ -34,8 +34,7 @@ export default function PhoneExperience({ onLimitReached }: { onLimitReached?: (
   const keyTimer = useRef(0);
   const keyLast = useRef(0);
   const keyPending = useRef('');
-  const [angles, setAngles] = useState<{ yaw: number; pitch: number }>({ yaw: INITIAL_POSE.yaw, pitch: INITIAL_POSE.pitch });
-  const [quad, setQuad] = useState('');
+  const lastPoseReport = useRef(0);
   const [frozen, setFrozen] = useState(false);
   const support = useWebglSupport();
   const [Scene, setScene] = useState<ComponentType<PhoneSceneProps> | null>(null);
@@ -90,10 +89,17 @@ export default function PhoneExperience({ onLimitReached }: { onLimitReached?: (
     if (intro === 'done' && window.matchMedia('(hover: none)').matches) armHint(1200);
   }, [intro, armHint]);
 
-  const reportPose = useCallback((yaw: number, pitch: number, corners: ScreenQuad) => { setAngles({ yaw: Number(yaw.toFixed(1)), pitch: Number(pitch.toFixed(1)) }); setQuad(corners.join(',')); }, []);
+  const reportPose = useCallback((yaw: number, pitch: number, corners: ScreenQuad) => {
+    const now = performance.now();
+    if (now - lastPoseReport.current < 100) return;
+    lastPoseReport.current = now;
+    const el = root.current;
+    if (!el) return;
+    el.dataset.yawDeg = String(Number(yaw.toFixed(1))); el.dataset.pitchDeg = String(Number(pitch.toFixed(1))); el.dataset.screenQuad = corners.join(',');
+  }, []);
   const markReady = useCallback(() => setCanvasReady(true), []);
   const introDone = useCallback(() => setIntro('done'), []);
-  const markRotated = useCallback(() => { if (!rotated.current) { rotated.current = true; window.clearTimeout(hintTimer.current); setHint(false); } setHasRotated(true); }, []);
+  const markRotated = useCallback(() => { if (!rotated.current) { rotated.current = true; window.clearTimeout(hintTimer.current); setHint(false); setHasRotated(true); } }, []);
   const stopIdle = useCallback(() => {
     if (!pose.current.hasInteracted) {
       pose.current.hasInteracted = true; setFrozen(true);
@@ -105,7 +111,7 @@ export default function PhoneExperience({ onLimitReached }: { onLimitReached?: (
     const p = pose.current;
     p.hasInteracted = true; p.recentering = true;
     p.targetYaw = nearestEquivalentYaw(p.targetYaw); p.targetPitch = INITIAL_POSE.pitch; p.velocityYaw = 0; p.velocityPitch = 0;
-    setHasRotated(false);
+    rotated.current = false; setHasRotated(false);
     setAnnouncement('Aparelho recentrado.');
   }, []);
   // keyboard steps are announced at most once per second, with the angle relative to the home pose (0-359)
@@ -120,23 +126,41 @@ export default function PhoneExperience({ onLimitReached }: { onLimitReached?: (
     if (event.button !== 0 || (event.target as Element).closest('.phone-controls')) return;
     stopIdle();
     pose.current.recentering = false;
-    pointer.current = { id: event.pointerId, x: event.clientX, y: event.clientY, at: event.timeStamp, travelled: 0, touch: event.pointerType === 'touch', announced: false };
+    const touch = event.pointerType === 'touch';
+    pointer.current = { id: event.pointerId, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, at: event.timeStamp, travelled: 0, touch, axis: touch ? 'pending' : 'horizontal', announced: false };
     pose.current.dragging = true; pose.current.velocityYaw = 0; pose.current.velocityPitch = 0;
-    event.currentTarget.setPointerCapture(event.pointerId);
+    if (!touch) event.currentTarget.setPointerCapture(event.pointerId);
     setDragging(true);
   };
   const move = (event: React.PointerEvent<HTMLDivElement>) => {
     const last = pointer.current;
     if (!last || last.id !== event.pointerId) return;
-    // on touch the page keeps vertical scrolling: only horizontal swipes turn the device (the browser cancels the pointer on a vertical pan)
-    const dx = event.clientX - last.x; const dy = last.touch ? 0 : event.clientY - last.y; const now = event.timeStamp; const elapsed = Math.max(8, now - last.at) / 1000;
+    const now = event.timeStamp;
+    let axis = last.axis;
+    if (last.touch && axis === 'pending') {
+      const fromStartX = event.clientX - last.startX; const fromStartY = event.clientY - last.startY;
+      if (Math.max(Math.abs(fromStartX), Math.abs(fromStartY)) < 8) return;
+      axis = Math.abs(fromStartX) > Math.abs(fromStartY) ? 'horizontal' : 'vertical';
+      if (axis === 'vertical') {
+        pointer.current = { ...last, axis, x: event.clientX, y: event.clientY, at: now, travelled: Math.hypot(fromStartX, fromStartY) };
+        return;
+      }
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+    if (axis === 'vertical') {
+      pointer.current = { ...last, axis, x: event.clientX, y: event.clientY, at: now, travelled: last.travelled + Math.hypot(event.clientX - last.x, event.clientY - last.y) };
+      return;
+    }
+    // Once touch movement passes the 8 px axis lock, both axes rotate until release; pan-y leaves vertical-first gestures to the browser.
+    const dx = last.touch && last.axis === 'pending' ? event.clientX - last.startX : event.clientX - last.x;
+    const dy = event.clientY - last.y; const elapsed = Math.max(8, now - last.at) / 1000;
     const next = applyDrag(pose.current.targetYaw, pose.current.targetPitch, dx, dy);
     pose.current.targetYaw = next.yaw; pose.current.targetPitch = next.pitch;
     const travelled = last.travelled + Math.hypot(dx, event.clientY - last.y);
     let announced = last.announced;
     if (travelled > TAP_SLOP_PX) { markRotated(); if (!announced) { announced = true; setAnnouncement('Girando o aparelho.'); } }
     pose.current.velocityYaw = capFlick(dx * 0.55 / elapsed); pose.current.velocityPitch = capFlick(dy * 0.42 / elapsed);
-    pointer.current = { ...last, x: event.clientX, y: event.clientY, at: now, travelled, announced };
+    pointer.current = { ...last, axis, x: event.clientX, y: event.clientY, at: now, travelled, announced };
   };
   const release = (event: React.PointerEvent<HTMLDivElement>) => {
     const active = pointer.current;
@@ -177,7 +201,7 @@ export default function PhoneExperience({ onLimitReached }: { onLimitReached?: (
   return <div ref={root} className="phone-wrap" tabIndex={0} role="group" aria-label="Smartphone 3D demonstrativo. Use as setas para girar e Home para recentrar." aria-describedby="phone-demo-description"
     onPointerEnter={enter} onPointerLeave={leave} onPointerDown={down} onPointerMove={move} onPointerUp={release} onPointerCancel={release} onKeyDown={keyDown}
     data-testid="phone" data-dragging={dragging} data-intro={intro} data-webgl={live ? 'live' : 'poster'}
-    data-idle={frozen ? 'frozen' : 'drifting'} data-screen-quad={quad} data-yaw-deg={angles.yaw} data-pitch-deg={angles.pitch} data-roll-deg={INITIAL_POSE.roll}>
+    data-idle={frozen ? 'frozen' : 'drifting'} data-screen-quad="" data-yaw-deg={INITIAL_POSE.yaw} data-pitch-deg={INITIAL_POSE.pitch} data-roll-deg={INITIAL_POSE.roll}>
     {/* the poster is a capture of this very scene at the approved pose: it is the no-WebGL fallback and, dimmed, the stand-in silhouette while the 3D chunk loads */}
     <Image className={`phone-poster${failed || support === false ? '' : ' is-dim'}${live ? ' is-handoff' : ''}`} src="/app-screens/phone-poster.webp" width={POSTER_SIZE.width} height={POSTER_SIZE.height} alt={POSTER_ALT} unoptimized priority />
     {Scene && !failed && <div className={`phone-canvas${canvasReady ? ' is-ready' : ''}`} aria-hidden="true">

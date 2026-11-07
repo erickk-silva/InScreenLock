@@ -84,6 +84,11 @@ a { color: inherit; text-decoration: none; }
 .benefit:nth-child(3) svg :is(path, circle, rect, line, polyline) { animation-delay: 1.38s; }
 .benefit:nth-child(5) svg :is(path, circle, rect, line, polyline) { animation-delay: 1.46s; }
 .benefit-dot { color: #9aa4b2; }
+.benefits-wrap { width: fit-content; max-width: 100%; margin: 35px 0 0 8px; }
+.benefits-wrap .benefits { margin: 0; }
+.benefits-info { flex: none; color: #8f9baa; }
+.benefits-caveat { max-width: 610px; margin: 10px 0 0; color: #8e9aa8; font: 12px/1.5 Roboto, sans-serif; }
+.benefits-caveat a { color: #9cebd5; text-decoration: underline; text-underline-offset: 3px; }
 .hero h1 .h1-accent .h1-fragment { animation: mint-settle 1.1s var(--ease-out) .2s both; }
 
 .phone-stage { position: relative; height: min(780px, 100%); min-height: 620px; z-index: 4; display: flex; align-items: center; justify-content: center; margin-right: -28px; }
@@ -250,7 +255,10 @@ a { color: inherit; text-decoration: none; }
   .button { width: 100%; min-height: 60px; border-radius: 18px; font-size: 17px; }
   .button-primary, .button-secondary { min-width: 0; }
   .release-note { margin: 8px 0 0; text-align: center; font-size: 12px; }
-  .benefits { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 10px; margin-top: 27px; font-size: 15px; }
+  .benefits-wrap { width: 100%; margin: 27px 0 0; }
+  .benefits { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 10px; margin-top: 0; font-size: 15px; }
+  .benefits-info { width: 14px; height: 14px; }
+  .benefits-caveat { max-width: none; margin-top: 10px; font-size: 11px; }
   .benefit { gap: 10px; }
   .benefit svg { width: 28px; height: 28px; }
   .benefit-dot { display: none; }
