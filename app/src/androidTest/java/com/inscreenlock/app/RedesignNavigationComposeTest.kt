@@ -74,6 +74,8 @@ class RedesignNavigationComposeTest {
         activityRule.waitForIdle()
         activityRule.onNodeWithText("Uso medido").assertIsDisplayed()
         activityRule.onNodeWithText("tempo em primeiro plano por app", substring = true).assertIsDisplayed()
+        activityRule.onNodeWithText("nome interno de cada tela (atividade) dos apps", substring = true).assertIsDisplayed()
+        activityRule.onNodeWithText("Esse nome é usado só em memória para não contar o mesmo tempo duas vezes", substring = true).assertIsDisplayed()
         activityRule.onNodeWithText("períodos com a tela ligada ou desligada", substring = true).assertIsDisplayed()
         activityRule.onNodeWithText("eventos de bloqueio de tela", substring = true).assertIsDisplayed()
         activityRule.onNodeWithText("limite diário combinado de Instagram e TikTok", substring = true).assertIsDisplayed()
