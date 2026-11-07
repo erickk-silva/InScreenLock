@@ -20,5 +20,5 @@ export default defineConfig({
       ? { executablePath: '/usr/bin/google-chrome', headless: false, env: { ...process.env, GALLIUM_DRIVER: 'd3d12' } as Record<string, string> }
       : { executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] },
   },
-  webServer: { command: 'npm run build && npm run serve -- --port 3100', url: 'http://127.0.0.1:3100', reuseExistingServer: false, timeout: 300_000 },
+  webServer: { command: 'NEXT_PUBLIC_ENABLE_RELEASE_FIXTURE=1 npm run build && npm run serve -- --port 3100', url: 'http://127.0.0.1:3100', reuseExistingServer: false, timeout: 300_000 },
 });

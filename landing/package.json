@@ -5,12 +5,16 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:pages": "NEXT_PUBLIC_ENABLE_RELEASE_FIXTURE=0 NEXT_PUBLIC_BASE_PATH=/InScreenLock NEXT_PUBLIC_SITE_URL=https://erickk-silva.github.io/InScreenLock/ next build && NEXT_PUBLIC_ENABLE_RELEASE_FIXTURE=0 NEXT_PUBLIC_BASE_PATH=/InScreenLock node scripts/pages-postbuild.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "e2e": "playwright test",
     "render-phone-poster": "node scripts/render-phone-poster/render.mjs",
-    "serve": "node scripts/serve-export.mjs"
+    "generate:og": "node scripts/generate-og-image.mjs",
+    "check:pages": "node scripts/check-pages-subpath.mjs",
+    "serve": "node scripts/serve-export.mjs",
+    "serve:pages": "NEXT_PUBLIC_BASE_PATH=/InScreenLock node scripts/serve-export.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "5.2.8",

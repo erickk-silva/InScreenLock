@@ -4,8 +4,7 @@ import { useEffect, useState } from 'react';
 import { Menu } from 'lucide-react';
 import { AndroidGlyph, BrandMark } from './HeroGlyphs';
 
-/** Until the content sections of phase P3 exist, every link lands on a section that is visible today: the demo, the privacy note or the download block. */
-const links = [['Como funciona', '#demo'], ['Recursos', '#demo'], ['Privacidade', '#privacidade'], ['FAQ', '#download']];
+const links = [['Como funciona', '#como-funciona'], ['Demonstração', '#demo'], ['Recursos', '#recursos'], ['Privacidade', '#privacidade'], ['Resultados', '#resultados'], ['FAQ', '#faq']];
 
 /** Entrance slide on load; turns into frosted glass with a hairline border once the page scrolls past 8 px. */
 export default function SiteHeader() {
@@ -22,7 +21,7 @@ export default function SiteHeader() {
       <div className="header-right"><nav className="desktop-nav" aria-label="Navegação principal">{links.map(([label, href]) => <a key={label} href={href}>{label}</a>)}</nav>
       <a className="header-download" href="#download"><AndroidGlyph size={22}/> Baixar app</a></div>
       <button className="menu-toggle" aria-label={open ? 'Fechar menu' : 'Abrir menu'} aria-expanded={open} aria-controls="mobile-navigation" onClick={() => setOpen(!open)}><Menu size={24}/></button>
-      {open && <nav className="mobile-nav" id="mobile-navigation" aria-label="Navegação móvel">{links.map(([label, href]) => <a key={label} href={href} onClick={() => setOpen(false)}>{label}</a>)}<a href="#download" onClick={() => setOpen(false)}>Baixar app</a></nav>}
+      <nav className="mobile-nav" id="mobile-navigation" aria-label="Navegação móvel" hidden={!open}>{links.map(([label, href]) => <a key={label} href={href} onClick={() => setOpen(false)}>{label}</a>)}<a href="#download" onClick={() => setOpen(false)}>Baixar app</a></nav>
     </header>
   </div>;
 }

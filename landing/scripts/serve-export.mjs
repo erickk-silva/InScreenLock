@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../out');
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
 const arg = process.argv.find((value) => value.startsWith('--port='));
 const portIndex = process.argv.indexOf('--port');
 const port = Number(arg?.split('=')[1] ?? (portIndex >= 0 ? process.argv[portIndex + 1] : 3100));
@@ -11,6 +12,8 @@ const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 
 createServer((request, response) => {
   let pathname = decodeURIComponent(new URL(request.url ?? '/', 'http://localhost').pathname);
+  if (basePath && (pathname === basePath || pathname.startsWith(`${basePath}/`))) pathname = pathname.slice(basePath.length) || '/';
+  else if (basePath && pathname === '/') { response.writeHead(302, { Location: `${basePath}/` }).end(); return; }
   if (pathname.endsWith('/')) pathname += 'index.html';
   let target = path.resolve(root, `.${pathname}`);
   if (!target.startsWith(root + path.sep) && target !== path.join(root, 'index.html')) { response.writeHead(403).end(); return; }
