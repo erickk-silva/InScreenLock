@@ -13,6 +13,7 @@ The owner explicitly decided, in the 2026-11-06 session, to redesign the whole a
 3. **Haze 2.1.0** (`dev.chrisbanes.haze:haze` and `haze-blur`, Apache-2.0) is an approved third-party UI dependency for the frosted-glass effect. It declares no permissions, performs no network access and collects nothing.
 4. **Weekly usage** (Análises) is computed on demand from Android UsageStats for the last seven local days and held in memory only; nothing is persisted to DataStore, files or logs (owner chose option 1). A day with no recognised events is shown as unavailable, never as zero. The query runs off the main thread when the tab is opened (and on retry or when Usage Access changes), not in the lock path.
 5. **Package visibility**: `<queries>` also names `com.instagram.android` and `com.zhiliaoapp.musically` so their launcher icons and labels resolve, in addition to the MAIN/LAUNCHER intent from ADR-0003. `QUERY_ALL_PACKAGES` is still not used.
+6. **Estado de atenção**: Decisão do dono (2026-11-07): o estado de atenção (perto do limite) usa âmbar no anel e no banner, e não o coral do canvas, para diferenciar 'atenção' de 'limite excedido' (coral); o estado também é comunicado por texto e ícone.
 
 ## Consequences
 
