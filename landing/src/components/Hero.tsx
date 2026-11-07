@@ -28,15 +28,14 @@ const GLASS_MINT = { '--spotlight-card-surface': 'rgba(10, 34, 32, .42)', '--spo
 const GLASS_CORAL = { '--spotlight-card-surface': 'rgba(46, 20, 28, .44)', '--spotlight-card-border': 'linear-gradient(145deg, rgba(255,170,178,1), rgba(255,107,122,.36) 38%, rgba(255,107,122,.14) 62%, rgba(255,107,122,.9))', '--spotlight-card-shadow': 'inset 0 1.5px 0 rgba(255,255,255,.42), inset 0 0 34px rgba(255,107,122,.18), inset 0 -22px 34px -22px rgba(255,107,122,.45), 0 38px 70px -26px rgba(255,84,97,.85), 0 0 46px -12px rgba(255,84,97,.42), 0 14px 26px -14px rgba(0,0,0,.6)' } as CSSProperties;
 // Aurora ribbon behind the device, like the approved hero: two OPEN crescents of one tilted ellipse (wide and bright at the lower left, a softer sweep up the right side),
 // each swelling and tapering to a point. Their ends hide behind the phone and the top stays dark, so it never reads as a closed halo.
-const RIBBON_LOWER: RibbonSpec = { cx: 380, cy: 410, rx: 365, ry: 240, rotate: -22, from: 236, to: 78, width: 128, peak: 0.42 };
-const RIBBON_RIGHT: RibbonSpec = { cx: 380, cy: 410, rx: 392, ry: 244, rotate: -22, from: 58, to: -84, width: 150, peak: 0.5 };
+const RIBBON_LOWER: RibbonSpec = { cx: 380, cy: 410, rx: 365, ry: 240, rotate: -22, from: 230, to: 94, width: 154, peak: 0.38 };
+const RIBBON_RIGHT: RibbonSpec = { cx: 380, cy: 410, rx: 392, ry: 244, rotate: -22, from: 48, to: -68, width: 126, peak: 0.62 };
 const RIBBONS = [RIBBON_LOWER, RIBBON_RIGHT].map((spec) => ({ outline: ribbonOutline(spec), rim: ribbonRim(spec) }));
-const LINE_FROM = { opacity: 0, y: '.5em', filter: 'blur(12px)' };
+const LINE_FROM = { opacity: 1, y: '8px', filter: 'blur(0px)' };
 const LINE_TO = { opacity: 1, y: 0, filter: 'blur(0px)' };
 
 /**
- * The server HTML carries the plain copy. With JS + motion allowed (`.js-motion`) it stays hidden until its React Bits effect starts;
- * without JS, with reduced motion, or if hydration is late (CSS fallback after 3 s) it is simply visible.
+ * The server HTML carries the plain copy. React Bits starts from visible text and only adds a short positional highlight after hydration.
  */
 function HeadlineLine({ text, startMs, stagger, duration }: { text: string; startMs: number; stagger: number; duration: number }) {
   const stage = useMotionStage(startMs);
@@ -48,7 +47,7 @@ function HeadlineLine({ text, startMs, stagger, duration }: { text: string; star
 function Subheadline() {
   const stage = useMotionStage(560);
   return stage === 'motion'
-    ? <BlurText text={SUBHEADLINE} className="subheadline" trigger="load" animateBy="words" direction="bottom" delay={34} stepDuration={.5} blur={9} distance={14} />
+    ? <BlurText text={SUBHEADLINE} className="subheadline" trigger="load" animateBy="words" direction="bottom" delay={34} stepDuration={.5} blur={0} distance={8} animationFrom={{ opacity: 1, y: 8, filter: 'blur(0px)' }} animationTo={[{ opacity: 1, y: -1, filter: 'blur(0px)' }, { opacity: 1, y: 0, filter: 'blur(0px)' }]} />
     : <p className="subheadline motion-hide">{SUBHEADLINE}</p>;
 }
 
@@ -80,14 +79,14 @@ export default function Hero() {
           <span className="h1-line h1-accent" aria-hidden="true"><HeadlineLine text="Seu tempo tem." startMs={270} stagger={26} duration={.85} /></span>
         </h1>
         <Subheadline/>
-        <div className="hero-actions enter" style={delayed(950)}>
+        <AnimatedContent className="hero-actions" trigger="mount" initialOpacity={1} animateOpacity={false} distance={8} duration={.85} delay={.18}>
           <ClickSpark sparkColor={['#22e3b0', '#7ffbe0', '#ffffff']} sparkCount={12} sparkRadius={34} sparkSize={9} sparkWidth={2.2} duration={.65} easing="ease-out" shape="streak" glow={.6} style={{ display: 'inline-flex', width: 'auto', height: 'auto' }}>
             <Magnet disabled={!finePointer} maxOffset={5} magnetStrength={8} padding={30} wrapperClassName="magnet-wrap">
               <StarBorder as="a" href="#download" className="button button-primary" radius={26} thickness={1.5} duration={5} trailLength={.34} glow={.75} hover="lap" backgroundColor={MINT_FLAT} textColor="#03231c" color="#ffffff" trailColor="#b8fff0" borderColor="rgba(255,255,255,.3)"><AndroidGlyph size={30} color="#03231c"/>Baixar para Android<ArrowRight size={28}/></StarBorder>
             </Magnet>
           </ClickSpark>
           <Magnet disabled={!finePointer} maxOffset={4} magnetStrength={9} padding={25} wrapperClassName="magnet-wrap"><a className="button button-secondary" href="#demo"><span className="play-icon"><CirclePlay size={37}/></span>Ver demonstração</a></Magnet>
-        </div>
+        </AnimatedContent>
         {release.status === 'preparing' && <p className="release-note enter" style={delayed(1050)}>Download em preparação. O APK será publicado após verificação.</p>}
         <AnimatedContent className="benefits" trigger="mount" distance={10} duration={.6} delay={1.1} stagger={.07}>
           <span className="benefit"><ShieldCheck aria-hidden="true"/>Sem conta</span><span className="benefit-dot" aria-hidden="true">•</span>
@@ -95,7 +94,7 @@ export default function Hero() {
           <span className="benefit"><Layers3 aria-hidden="true"/>100% local</span>
         </AnimatedContent>
       </section>
-      <section className="phone-stage" id="demo" aria-label="Demonstração do aplicativo">
+      <section className="phone-stage" id="demo-phone" aria-label="Demonstração do aplicativo">
         <div className="phone-layer phone-layer-far" data-parallax="4" aria-hidden="true"><div className="phone-halo"/><div className="phone-floor"/></div>
         <div className="phone-layer phone-layer-mid" data-parallax="7" aria-hidden="true">
           <svg className="phone-orbit" viewBox="0 0 740 742" preserveAspectRatio="xMidYMid meet">

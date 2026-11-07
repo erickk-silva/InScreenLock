@@ -1,6 +1,7 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { saveCast, startCast } from './support/screencast';
 
 /**
@@ -11,7 +12,7 @@ const GPU = process.env.E2E_GPU === '1';
 const HOME_YAW = -28;
 const EVIDENCE = path.resolve(process.cwd(), '../.agent-harness/artifacts/ISL-LANDING-001/20261106T200700Z');
 const SHOTS = path.join(EVIDENCE, 'hero-shots');
-const FRAMES = path.join(EVIDENCE, 'motion-frames/r3');
+const FRAMES = path.join(EVIDENCE, 'motion-frames/r4');
 const WAIT = { timeout: 240_000 };
 /** A classic scrollbar (headed Chrome) takes 15 px from the layout; the stills are cut without it so they line up with the 1672 x 941 reference. */
 const NO_SCROLLBAR = 'html{scrollbar-width:none}';
@@ -38,6 +39,8 @@ async function dragAndCountFrames(page: Page, phone: Locator, ms: number) {
 }
 
 test('performance: FPS while dragging the device on the hardware GPU (no recording running)', async ({ browser }) => {
+  const processes = execFileSync('ps', ['-eo', 'comm='], { encoding: 'utf8' }).split('\n').map((name) => name.trim()).filter((name) => /^(qemu(?:-system|-kvm)?|emulator)([-_].*)?$/i.test(name));
+  expect(processes, 'the isolated GPU measurement requires no running QEMU or Android emulator').toEqual([]);
   await fs.mkdir(SHOTS, { recursive: true });
   const context = await browser.newContext({ viewport: { width: 1672, height: 941 }, deviceScaleFactor: 1, locale: 'pt-BR', reducedMotion: 'no-preference' });
   const page = await context.newPage();
@@ -48,8 +51,13 @@ test('performance: FPS while dragging the device on the hardware GPU (no recordi
   const renderer = await rendererOf(page);
   const drag = await dragAndCountFrames(page, phone, 4000);
   const idle = await page.evaluate(() => new Promise<number>((resolve) => { let n = 0; const t0 = performance.now(); const loop = (t: number) => { n++; if (t - t0 < 3000) requestAnimationFrame(loop); else resolve(Number(((n - 1) / ((t - t0) / 1000)).toFixed(1))); }; requestAnimationFrame(loop); }));
-  await fs.writeFile(path.join(SHOTS, 'fps-gpu.json'), `${JSON.stringify({ renderer, viewport: '1672x941', dpr: 1, dragFps: drag, idleFps: idle }, null, 2)}\n`);
-  console.log(`GPU renderer: ${renderer}\nFPS during drag: ${drag.fps} (worst frame gap ${drag.worstFrameGapMs} ms), idle: ${idle}`);
+  const cast = await startCast(page);
+  const underCaptureLoad = await dragAndCountFrames(page, phone, 2500);
+  await cast.stop();
+  const fpsReport = { renderer, viewport: '1672x941', dpr: 1, qemuProcesses: processes, hostGpuQuery: 'nvidia-smi unavailable: GPU access blocked by the operating system', isolated: { drag, idleFps: idle }, underLoad: { workload: 'CDP JPEG screencast plus phone rotation', drag: underCaptureLoad } };
+  await fs.writeFile(path.join(SHOTS, 'fps-gpu-r4.json'), `${JSON.stringify(fpsReport, null, 2)}\n`);
+  await fs.writeFile(path.join(SHOTS, 'fps-gpu.json'), `${JSON.stringify({ renderer, viewport: fpsReport.viewport, dpr: 1, dragFps: drag, idleFps: idle }, null, 2)}\n`);
+  console.log(`GPU renderer: ${renderer}\nFPS isolated: ${drag.fps} (idle ${idle}); under capture load: ${underCaptureLoad.fps}`);
   await context.close();
   expect(renderer).toMatch(/NVIDIA|D3D12/);
   // the target is 55+ on a quiet machine (51.6 measured on an idle GTX 1070); the assertion is only a smoothness floor so other load on the machine cannot make the suite flaky
@@ -60,9 +68,9 @@ test('motion: load 0-3.5 s with the H1 and the phone, then a drag, recorded as v
   await fs.mkdir(FRAMES, { recursive: true });
   const context = await browser.newContext({ viewport: { width: 1672, height: 941 }, deviceScaleFactor: 1, locale: 'pt-BR', reducedMotion: 'no-preference' });
   const page = await context.newPage();
-  const cast = await startCast(page);
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   const t0 = Date.now() / 1000;
-  await page.goto('/', { waitUntil: 'commit' });
+  const cast = await startCast(page);
   const phone = page.getByTestId('phone');
   await expect(phone).toHaveAttribute('data-intro', 'done', WAIT);
   await page.waitForTimeout(Math.max(0, 3800 - (Date.now() / 1000 - t0) * 1000)); // the load window the frames are cut from

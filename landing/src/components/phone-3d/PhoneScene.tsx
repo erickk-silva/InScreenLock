@@ -51,7 +51,7 @@ function useScreenTexture() {
 }
 /** Offset of the device from the canvas centre, in units of the device scale. */
 const HOME_X = -0.12;
-const HOME_Y = 0.13;
+const HOME_Y = 0.10;
 
 /** Geometries and the back texture are created once per scene and disposed with it. */
 function useDeviceParts() {
@@ -192,7 +192,6 @@ function SceneContent({ pose, ...hooks }: { pose: React.MutableRefObject<PhonePo
   return <>
     <ambientLight intensity={1.0} />
     <directionalLight name="key-light" position={[5, 5, 6]} intensity={3.0} color="#e7fff9" />
-    <pointLight position={[-4, 1, 2]} intensity={32} color="#19d9ae" distance={9} />
     <pointLight position={[3, -4, -2]} intensity={20} color="#15b891" distance={8} />
     <Device pose={pose} {...hooks} />
     <Environment resolution={64} frames={1} background={false}>
@@ -217,7 +216,7 @@ export default function PhoneScene({ pose, active = true, onFailure, onReady, ..
     onReady?.();
   }, [lost, onReady]);
   useEffect(() => () => canvas.current?.removeEventListener('webglcontextlost', lost), [lost]);
-  return <Canvas onCreated={created} camera={{ position: [0, 0, CAMERA_Z], fov: FOV, near: CAMERA_NEAR, far: CAMERA_FAR }} dpr={[1, 1.5]} frameloop={active ? 'always' : 'never'} gl={{ antialias: true, alpha: true, powerPreference: 'low-power' }}>
+  return <Canvas onCreated={created} camera={{ position: [0, 0, CAMERA_Z], fov: FOV, near: CAMERA_NEAR, far: CAMERA_FAR }} dpr={1} frameloop={active ? 'always' : 'never'} gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}>
     <SceneContent pose={pose} {...hooks} />
   </Canvas>;
 }

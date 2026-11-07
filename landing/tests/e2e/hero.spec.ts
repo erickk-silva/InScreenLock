@@ -17,6 +17,33 @@ const introDone = (phone: Locator) => expect(phone).toHaveAttribute('data-intro'
 
 test('E2E-01 hero headline, download state, and no horizontal overflow', async ({ page }) => {
   await page.setViewportSize({ width: 1672, height: 941 });
+  await fs.mkdir(path.join(EVIDENCE, 'hero-shots'), { recursive: true });
+  const browser = page.context().browser(); if (!browser) throw new Error('browser missing');
+  const plainContext = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1672, height: 941 }, deviceScaleFactor: 1 });
+  const plain = await plainContext.newPage(); await plain.goto('http://127.0.0.1:3100/', { waitUntil: 'domcontentloaded' });
+  await expect(plain.locator('#hero-title')).toBeVisible(); await expect(plain.getByRole('link', { name: /Baixar para Android/ })).toBeVisible();
+  await plain.screenshot({ path: path.join(EVIDENCE, 'hero-shots/first-paint-no-js.png') }); await plainContext.close();
+
+  await page.route('**/_next/static/chunks/**/*.js', (route) => route.abort()); // JS is enabled, but hydration stays pending while SSR is captured.
+  await page.goto('http://127.0.0.1:3100/', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#hero-title')).toBeVisible(); await expect(page.getByRole('link', { name: /Baixar para Android/ })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains('js-motion'))).toBeTruthy();
+  const readFirstFrame = () => page.evaluate(() => {
+    const headline = document.querySelector('#hero-title')!; const cta = document.querySelector('.button-primary')!;
+    const state = (node: Element) => { const style = getComputedStyle(node); const rect = node.getBoundingClientRect(); return { opacity: style.opacity, visibility: style.visibility, filter: style.filter, width: Math.round(rect.width), height: Math.round(rect.height) }; };
+    return { headline: state(headline), cta: state(cta), visibleText: [...document.querySelectorAll('.h1-fragment,.subheadline')].map((node) => ({ text: node.textContent?.trim(), ...state(node) })) };
+  });
+  const at0ms = await readFirstFrame();
+  await page.screenshot({ path: path.join(EVIDENCE, 'hero-shots/first-paint-js-000ms.png') });
+  await page.waitForTimeout(100);
+  const at100ms = await readFirstFrame();
+  for (const sample of [at0ms, at100ms]) {
+    expect(sample.headline.opacity).toBe('1'); expect(sample.headline.visibility).toBe('visible'); expect(sample.headline.filter).toBe('none');
+    expect(sample.cta.opacity).toBe('1'); expect(sample.cta.visibility).toBe('visible');
+    expect(sample.visibleText).toHaveLength(3); expect(sample.visibleText.every((node) => node.opacity === '1' && node.visibility === 'visible' && node.filter === 'none')).toBeTruthy();
+  }
+  await fs.writeFile(path.join(EVIDENCE, 'hero-shots/first-paint-r4.json'), `${JSON.stringify({ mode: 'JavaScript enabled; Next chunks blocked to capture server HTML before hydration', samples: { '0ms': at0ms, '100ms': at100ms } }, null, 2)}\n`);
+  await page.screenshot({ path: path.join(EVIDENCE, 'hero-shots/first-paint-js-100ms.png') });
   await page.goto('/?visualTest=1');
   await expect(page.getByRole('heading', { level: 1, name: 'Seu feed não tem fim. Seu tempo tem.' })).toBeVisible();
   await expect(page.getByText('Baixar para Android')).toBeVisible();
@@ -47,6 +74,7 @@ test('demonstration labelling: visible caption and a description with the fictio
 test('copy is visible without JavaScript and is never inline-hidden in the server HTML', async ({ page, request }) => {
   const html = await (await request.get('/')).text();
   expect(html).not.toMatch(/visibility:\s*hidden/);
+  expect((html.match(/id="demo"/g) ?? []).length).toBe(1);
   const browser = page.context().browser(); if (!browser) throw new Error('browser missing');
   const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1672, height: 941 } });
   const plain = await context.newPage(); await plain.goto('http://127.0.0.1:3100/');
