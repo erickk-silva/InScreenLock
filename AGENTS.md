@@ -1,6 +1,6 @@
 # InScreenLock - local agent rules (V1.1)
 
-Authority order: explicit user request > `InScreenLock_SPEC_FROZEN_v1.1.md` > accepted ADRs > valid local capsule and policy > live Android docs and real test evidence > existing source > open-source references.
+Authority order: explicit user request > `docs/spec/InScreenLock_SPEC_FROZEN_v1.1.md` > accepted ADRs > valid local capsule and policy > live Android docs and real test evidence > existing source > open-source references.
 
 Workspace scope: only the `InScreenLock` checkout and required user-scoped development tool installations. Never mutate unrelated projects, credentials, OS security protections, other repositories, or the user's other applications.
 
