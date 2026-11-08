@@ -87,7 +87,7 @@ test('LCP does not wait for 3D or text animations', async ({ page }) => {
   await page.addInitScript(() => { (window as unknown as { lcp: number }).lcp = 0; new PerformanceObserver((list) => { const last = list.getEntries().at(-1); if (last) (window as unknown as { lcp: number }).lcp = last.startTime; }).observe({ type: 'largest-contentful-paint', buffered: true }); });
   await page.setViewportSize({ width: 1672, height: 941 }); await page.goto('/');
   await page.waitForTimeout(3000);
-  const lcp = await page.evaluate(() => (window as unknown as { lcp: number }).lcp);
+  const lcp = await page.evaluate(() => (window as unknown as { lcp: number }).lcp || performance.getEntriesByType('largest-contentful-paint').at(-1)?.startTime || 0);
   console.log(`LCP ${Math.round(lcp)} ms`);
   expect(lcp).toBeGreaterThan(0); expect(lcp).toBeLessThan(2500);
 });
@@ -153,7 +153,7 @@ test('a 3D chunk that fails to download leaves the page, CTA and poster intact',
 test('E2E-02 and 03 mouse drag and accumulated turns remain unbounded while pitch clamps', async ({ page }) => {
   await page.goto('/?visualTest=1');
   const phone = page.getByTestId('phone'); await live(phone); await introDone(phone);
-  const box = await phone.boundingBox(); if (!box) throw new Error('phone missing');
+  const box = await phone.getByTestId('phone-capture').boundingBox(); if (!box) throw new Error('phone capture missing');
   const x = box.x + 50; const y = box.y + box.height / 2;
   await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x + 330, y, { steps: 8 }); await page.mouse.up();
   await expect.poll(() => yawOf(phone)).toBeGreaterThan(100);
@@ -161,14 +161,15 @@ test('E2E-02 and 03 mouse drag and accumulated turns remain unbounded while pitc
   const releaseYaw = Number(await phone.getAttribute('data-yaw-deg'));
   expect(releaseYaw).toBeGreaterThan(100);
   await phone.evaluate((root) => {
-    const target = root as HTMLDivElement & { setPointerCapture: () => void; hasPointerCapture: () => boolean; releasePointerCapture: () => void };
+    const target = root.querySelector('.phone-capture') as HTMLDivElement & { setPointerCapture: () => void; hasPointerCapture: () => boolean; releasePointerCapture: () => void };
     target.setPointerCapture = () => {}; target.hasPointerCapture = () => true; target.releasePointerCapture = () => {};
     const send = (type: string, clientX: number, clientY: number) => target.dispatchEvent(new PointerEvent(type, { pointerId: 78, pointerType: 'mouse', button: 0, clientX, clientY, bubbles: true }));
     send('pointerdown', 100, 100); send('pointermove', 760, 100); send('pointermove', 1420, 100); send('pointerup', 1420, 100);
   });
   await expect.poll(() => yawOf(phone)).toBeGreaterThan(600);
   const verticalDrag = (id: number, from: number, to: number) => phone.evaluate((root, args) => {
-    const target = root as HTMLDivElement;
+    const target = root.querySelector('.phone-capture') as HTMLDivElement & { setPointerCapture: () => void };
+    target.setPointerCapture = () => {};
     const send = (type: string, clientY: number) => target.dispatchEvent(new PointerEvent(type, { pointerId: args.id, pointerType: 'mouse', button: 0, clientX: 100, clientY, bubbles: true }));
     send('pointerdown', args.from); send('pointermove', args.to); send('pointerup', args.to);
   }, { id, from, to });
@@ -185,7 +186,7 @@ test('release: a fast flick keeps turning with inertia, a pointer that rested be
   await page.goto('/?visualTest=1'); const phone = page.getByTestId('phone');
   await live(phone); await introDone(phone);
   const gesture = (restMs: number) => phone.evaluate(async (root, rest) => {
-    const target = root as HTMLDivElement & { setPointerCapture: () => void; hasPointerCapture: () => boolean; releasePointerCapture: () => void };
+    const target = root.querySelector('.phone-capture') as HTMLDivElement & { setPointerCapture: () => void; hasPointerCapture: () => boolean; releasePointerCapture: () => void };
     target.setPointerCapture = () => {}; target.hasPointerCapture = () => true; target.releasePointerCapture = () => {};
     const send = (type: string, clientX: number) => target.dispatchEvent(new PointerEvent(type, { pointerId: 91, pointerType: 'mouse', button: 0, clientX, clientY: 300, bubbles: true }));
     send('pointerdown', 100); send('pointermove', 200); // +100 px = +55 degrees
@@ -231,23 +232,19 @@ test('E2E-04 horizontal swipe with a vertical component rotates and pitches the 
   await context.close();
 });
 
-test('E2E-04b vertical swipe over the phone scrolls the page instead of rotating it (390x844)', async ({ page }) => {
+test('E2E-04b vertical swipe over the projected phone screen changes pitch (390x844)', async ({ page }) => {
   const { context, mobile } = await mobilePage(page);
   const phone = mobile.getByTestId('phone'); await phone.scrollIntoViewIfNeeded(); await live(phone);
-  const box = await phone.boundingBox(); if (!box) throw new Error('phone missing');
-  const before = await mobile.evaluate(() => scrollY);
-  const yawBefore = await yawOf(phone); const pitchBefore = await pitchOf(phone);
-  const x = box.x + box.width / 2; const y = Math.min(box.y + box.height * 0.75, 800);
-  await swipe(mobile, [x, y], [x, y - 240]);
-  await expect.poll(() => mobile.evaluate(() => scrollY)).toBeGreaterThan(before + 60);
-  expect(Math.abs((await yawOf(phone)) - yawBefore)).toBeLessThan(4); // a rotation by the swipe would be tens of degrees; only the idle drift (about 2 deg) may remain
-  expect(Math.abs((await pitchOf(phone)) - pitchBefore)).toBeLessThan(1.5);
+  const capture = mobile.getByTestId('phone-capture'); const box = await capture.boundingBox(); if (!box) throw new Error('phone capture missing');
+  const pitchBefore = await pitchOf(phone); const x = box.x + box.width / 2; const y = box.y + box.height / 2;
+  await swipe(mobile, [x, y + Math.min(40, box.height / 8)], [x, y - Math.min(120, box.height / 3)]);
+  await expect.poll(() => pitchOf(phone)).toBeLessThan(pitchBefore - 12);
   await context.close();
 });
 
 test('E2E-09b primary interactive targets are at least 44 by 44 CSS pixels', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 }); await page.goto('/?visualTest=1');
-  const targets = page.locator('.header-download, .menu-toggle, .hero-actions a, .story-dots button, .story-controls > div:last-child button, .demo-keypad button, .faq-item button');
+  const targets = page.locator('.header-download, .menu-toggle, .hero-actions a, .story-dots button, .story-controls > div:last-child button, .demo-keypad button, .faq-item button, #daily-minutes');
   await expect(page.locator('.hero-actions a').first()).toBeVisible();
   const sizes = await targets.evaluateAll((nodes) => nodes.filter((node) => getComputedStyle(node).display !== 'none').map((node) => {
     const rect = node.getBoundingClientRect(); return { label: node.getAttribute('aria-label') || node.textContent?.trim(), width: rect.width, height: rect.height };
@@ -257,8 +254,20 @@ test('E2E-09b primary interactive targets are at least 44 by 44 CSS pixels', asy
 });
 
 test('E2E-05 page scrolling remains available outside the phone', async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 800 }); await page.goto('/');
-  await page.mouse.move(100, 500); await page.mouse.wheel(0, 400); await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);
+  const { context, mobile } = await mobilePage(page);
+  const phoneBox = await mobile.getByTestId('phone-capture').boundingBox(); const stageBox = await mobile.locator('.phone-stage').boundingBox();
+  if (!phoneBox || !stageBox) throw new Error('phone stage missing');
+  const before = await mobile.evaluate(() => scrollY);
+  const stageX = Math.max(4, Math.min(stageBox.x + 8, phoneBox.x - 8));
+  await swipe(mobile, [stageX, 700], [stageX, 400]);
+  await expect.poll(() => mobile.evaluate(() => scrollY)).toBeGreaterThan(before + 60);
+  await mobile.evaluate(() => scrollTo(0, 0));
+  const copy = await mobile.locator('.hero-copy').boundingBox(); if (!copy) throw new Error('hero copy missing');
+  const textX = copy.x + copy.width / 2; const textY = Math.min(700, copy.y + copy.height - 35);
+  await swipe(mobile, [textX, textY], [textX, textY - 240]);
+  await expect.poll(() => mobile.evaluate(() => scrollY)).toBeGreaterThan(before + 60);
+  await expect.poll(() => mobile.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await context.close();
 });
 
 test('E2E-06 keyboard rotation, Home and the Recentrar button (real mouse click) return to the home pose', async ({ page }) => {
@@ -360,7 +369,7 @@ const cardCoverage = (page: Page) => page.evaluate(() => {
     const x = top[0] + (bottom[0] - top[0]) * v; const y = top[1] + (bottom[1] - top[1]) * v; total++;
     if (cards.some((c) => x > c.left - margin && x < c.right + margin && y > c.top - margin && y < c.bottom + margin)) covered++;
   }
-  return { covered, total, cards, viewport: innerWidth };
+  return { covered, total, cards, corners, viewport: innerWidth };
 });
 
 test('floating cards never cover the phone screen, and stay inside the viewport, at every required width', async ({ page }) => {
@@ -371,8 +380,8 @@ test('floating cards never cover the phone screen, and stay inside the viewport,
     const phone = page.getByTestId('phone'); await phone.scrollIntoViewIfNeeded(); await live(phone); await introDone(phone);
     await expect(phone).not.toHaveAttribute('data-screen-quad', '');
     await expect(page.locator('.alert-card.is-in')).toHaveCount(1);
-    const { covered, cards, viewport } = await cardCoverage(page);
-    expect(covered, `display samples covered by a card at ${width}px`).toBe(0);
+    const { covered, cards, corners, viewport } = await cardCoverage(page);
+    expect(covered, `display samples covered by a card at ${width}px: ${JSON.stringify({ cards, corners })}`).toBe(0);
     for (const card of cards) { expect(card.left, `card inside the viewport at ${width}px`).toBeGreaterThanOrEqual(0); expect(card.right).toBeLessThanOrEqual(viewport); }
   }
 });
@@ -423,20 +432,18 @@ test('E2E-04c on touch screens the gesture hint appears once the device has sett
   await context.close();
 });
 
-test('axe finds no serious or critical issue in the header, hero and footer', async ({ page }) => {
+test('axe finds no accessibility violations on the page', async ({ page }) => {
   await page.setViewportSize({ width: 1672, height: 941 }); await page.goto('/?visualTest=1');
-  const phone = page.getByTestId('phone'); await live(phone); await introDone(phone);
-  await expect.poll(() => page.evaluate(() => [...document.querySelectorAll('.benefit')].every((node) => getComputedStyle(node).opacity === '1')), WEBGL_WAIT).toBeTruthy(); // GSAP follows the frame rate: ~1 fps in software WebGL
-  const results = await new AxeBuilder({ page }).include('.site-header-bar').include('main.hero').include('.hero-footer').analyze();
+  const results = await new AxeBuilder({ page }).analyze();
   const summary = {
     scannedAt: new Date().toISOString(), mode: GPU ? 'gpu' : 'software', axeVersion: results.testEngine.version, url: results.url, viewport: '1672x941',
     counts: { passes: results.passes.length, violations: results.violations.length, incomplete: results.incomplete.length, inapplicable: results.inapplicable.length },
     violations: results.violations.map((violation) => ({ id: violation.id, impact: violation.impact, help: violation.help, nodes: violation.nodes.map((node) => ({ target: node.target, summary: node.failureSummary })) })),
-    incomplete: results.incomplete.map((item) => ({ id: item.id, impact: item.impact, nodes: item.nodes.length })),
+    incomplete: results.incomplete.map((item) => ({ id: item.id, impact: item.impact, nodes: item.nodes.map((node) => ({ target: node.target, checks: [...node.any, ...node.all, ...node.none].map((check) => ({ id: check.id, impact: check.impact, message: check.message, data: check.data })) })) })),
   };
   await fs.mkdir(path.join(EVIDENCE, 'hero-shots'), { recursive: true });
-  await fs.writeFile(path.join(EVIDENCE, 'hero-shots/axe.json'), `${JSON.stringify(summary, null, 2)}\n`);
-  expect(results.violations.filter((violation) => violation.impact === 'serious' || violation.impact === 'critical'), JSON.stringify(summary.violations)).toEqual([]);
+  await fs.writeFile(path.join(EVIDENCE, 'hero-shots/axe-r6.json'), `${JSON.stringify(summary, null, 2)}\n`);
+  expect(results.violations, JSON.stringify(summary.violations)).toEqual([]);
 });
 
 test('computed styles prove the token colours and the Inter / Roboto fonts really loaded', async ({ page }) => {

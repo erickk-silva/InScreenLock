@@ -17,6 +17,7 @@ const KEY_ANNOUNCE_MS = 1000;
 
 type Tap = { at: number; x: number; y: number };
 type Drag = { id: number; x: number; y: number; startX: number; startY: number; at: number; travelled: number; touch: boolean; axis: 'pending' | 'horizontal' | 'vertical'; announced: boolean };
+type CaptureBox = { left: number; top: number; width: number; height: number };
 
 /** Any failure inside the 3D scene (render error, shader, bad context) falls back to the poster instead of taking the page down. */
 class SceneBoundary extends Component<{ children: ReactNode; onFailure: () => void }, { failed: boolean }> {
@@ -47,6 +48,7 @@ export default function PhoneExperience({ onLimitReached }: { onLimitReached?: (
   const [intro, setIntro] = useState<'pending' | 'done'>('pending');
   const [inView, setInView] = useState(false);
   const [everInView, setEverInView] = useState(false);
+  const [captureBox, setCaptureBox] = useState<CaptureBox | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const rotated = useRef(false);
 
@@ -96,6 +98,15 @@ export default function PhoneExperience({ onLimitReached }: { onLimitReached?: (
     const el = root.current;
     if (!el) return;
     el.dataset.yawDeg = String(Number(yaw.toFixed(1))); el.dataset.pitchDeg = String(Number(pitch.toFixed(1))); el.dataset.screenQuad = corners.join(',');
+    const canvas = el.querySelector('.phone-canvas canvas');
+    if (canvas) {
+      const canvasRect = canvas.getBoundingClientRect(); const rootRect = el.getBoundingClientRect();
+      const xs = [corners[0], corners[2], corners[4], corners[6]]; const ys = [corners[1], corners[3], corners[5], corners[7]];
+      const left = Math.min(...xs) * canvasRect.width + canvasRect.left - rootRect.left;
+      const top = Math.min(...ys) * canvasRect.height + canvasRect.top - rootRect.top;
+      const next = { left, top, width: (Math.max(...xs) - Math.min(...xs)) * canvasRect.width, height: (Math.max(...ys) - Math.min(...ys)) * canvasRect.height };
+      setCaptureBox((previous) => previous && Math.max(Math.abs(previous.left - next.left), Math.abs(previous.top - next.top), Math.abs(previous.width - next.width), Math.abs(previous.height - next.height)) < 1 ? previous : next);
+    }
   }, []);
   const markReady = useCallback(() => setCanvasReady(true), []);
   const introDone = useCallback(() => setIntro('done'), []);
@@ -127,32 +138,17 @@ export default function PhoneExperience({ onLimitReached }: { onLimitReached?: (
     stopIdle();
     pose.current.recentering = false;
     const touch = event.pointerType === 'touch';
-    pointer.current = { id: event.pointerId, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, at: event.timeStamp, travelled: 0, touch, axis: touch ? 'pending' : 'horizontal', announced: false };
+    pointer.current = { id: event.pointerId, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, at: event.timeStamp, travelled: 0, touch, axis: 'horizontal', announced: false };
     pose.current.dragging = true; pose.current.velocityYaw = 0; pose.current.velocityPitch = 0;
-    if (!touch) event.currentTarget.setPointerCapture(event.pointerId);
+    event.currentTarget.setPointerCapture(event.pointerId);
     setDragging(true);
   };
   const move = (event: React.PointerEvent<HTMLDivElement>) => {
     const last = pointer.current;
     if (!last || last.id !== event.pointerId) return;
     const now = event.timeStamp;
-    let axis = last.axis;
-    if (last.touch && axis === 'pending') {
-      const fromStartX = event.clientX - last.startX; const fromStartY = event.clientY - last.startY;
-      if (Math.max(Math.abs(fromStartX), Math.abs(fromStartY)) < 8) return;
-      axis = Math.abs(fromStartX) > Math.abs(fromStartY) ? 'horizontal' : 'vertical';
-      if (axis === 'vertical') {
-        pointer.current = { ...last, axis, x: event.clientX, y: event.clientY, at: now, travelled: Math.hypot(fromStartX, fromStartY) };
-        return;
-      }
-      event.currentTarget.setPointerCapture(event.pointerId);
-    }
-    if (axis === 'vertical') {
-      pointer.current = { ...last, axis, x: event.clientX, y: event.clientY, at: now, travelled: last.travelled + Math.hypot(event.clientX - last.x, event.clientY - last.y) };
-      return;
-    }
-    // Once touch movement passes the 8 px axis lock, both axes rotate until release; pan-y leaves vertical-first gestures to the browser.
-    const dx = last.touch && last.axis === 'pending' ? event.clientX - last.startX : event.clientX - last.x;
+    const axis = last.axis;
+    const dx = event.clientX - last.x;
     const dy = event.clientY - last.y; const elapsed = Math.max(8, now - last.at) / 1000;
     const next = applyDrag(pose.current.targetYaw, pose.current.targetPitch, dx, dy);
     pose.current.targetYaw = next.yaw; pose.current.targetPitch = next.pitch;
@@ -199,7 +195,7 @@ export default function PhoneExperience({ onLimitReached }: { onLimitReached?: (
 
   const live = Scene !== null && !failed && canvasReady;
   return <div ref={root} className="phone-wrap" tabIndex={0} role="group" aria-label="Smartphone 3D demonstrativo. Use as setas para girar e Home para recentrar." aria-describedby="phone-demo-description"
-    onPointerEnter={enter} onPointerLeave={leave} onPointerDown={down} onPointerMove={move} onPointerUp={release} onPointerCancel={release} onKeyDown={keyDown}
+    onPointerEnter={enter} onPointerLeave={leave} onKeyDown={keyDown}
     data-testid="phone" data-dragging={dragging} data-intro={intro} data-webgl={live ? 'live' : 'poster'}
     data-idle={frozen ? 'frozen' : 'drifting'} data-screen-quad="" data-yaw-deg={INITIAL_POSE.yaw} data-pitch-deg={INITIAL_POSE.pitch} data-roll-deg={INITIAL_POSE.roll}>
     {/* the poster is a capture of this very scene at the approved pose: it is the no-WebGL fallback and, dimmed, the stand-in silhouette while the 3D chunk loads */}
@@ -207,6 +203,7 @@ export default function PhoneExperience({ onLimitReached }: { onLimitReached?: (
     {Scene && !failed && <div className={`phone-canvas${canvasReady ? ' is-ready' : ''}`} aria-hidden="true">
       <SceneBoundary onFailure={markFailure}><Scene pose={pose} active={inView} onFailure={markFailure} onReady={markReady} onPose={reportPose} onLimit={onLimitReached} onIntroDone={introDone} /></SceneBoundary>
     </div>}
+    <div className="phone-capture" aria-hidden="true" data-testid="phone-capture" style={captureBox ? { left: captureBox.left, top: captureBox.top, width: captureBox.width, height: captureBox.height } : undefined} onPointerEnter={enter} onPointerLeave={leave} onPointerDown={down} onPointerMove={move} onPointerUp={release} onPointerCancel={release}/>
     <p className={`gesture-hint${hint ? ' is-visible' : ''}`} aria-hidden="true"><MoveHorizontal size={16} strokeWidth={2.2} />Arraste para girar</p>
     <div className="phone-controls"><button className={`recenter${hasRotated ? ' recenter-active' : ''}`} type="button" onClick={reset}><RotateCcw size={14} /> Recentrar aparelho</button></div>
     <p className="demo-caption" data-testid="demo-caption">Tela demonstrativa — dados fictícios</p>

@@ -87,12 +87,12 @@ a { color: inherit; text-decoration: none; }
 .benefits-wrap { width: fit-content; max-width: 100%; margin: 35px 0 0 8px; }
 .benefits-wrap .benefits { margin: 0; }
 .benefits-info { flex: none; color: #8f9baa; }
-.benefits-caveat { max-width: 610px; margin: 10px 0 0; color: #8e9aa8; font: 12px/1.5 Roboto, sans-serif; }
+.benefits-caveat { max-width: 610px; margin: 10px 0 0; color: #a3adb9; font: 12px/1.5 Roboto, sans-serif; }
 .benefits-caveat a { color: #9cebd5; text-decoration: underline; text-underline-offset: 3px; }
 .hero h1 .h1-accent .h1-fragment { animation: mint-settle 1.1s var(--ease-out) .2s both; }
 
 .phone-stage { position: relative; height: min(780px, 100%); min-height: 620px; z-index: 4; display: flex; align-items: center; justify-content: center; margin-right: -28px; }
-.phone-wrap { width: min(100%, 540px); height: 100%; position: relative; z-index: 2; outline: none; touch-action: pan-y; cursor: grab; -webkit-user-select: none; user-select: none; }
+.phone-wrap { width: min(100%, 540px); height: 100%; position: relative; z-index: 2; outline: none; -webkit-user-select: none; user-select: none; }
 .phone-wrap[data-dragging="true"] { cursor: grabbing; }
 .phone-wrap:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 65%, transparent); outline-offset: -2px; border-radius: 32px; }
 /* same box as the canvas (inset -12% -9%), so poster and live scene line up exactly */
@@ -101,6 +101,8 @@ a { color: inherit; text-decoration: none; }
 .phone-poster.is-handoff { opacity: 0; visibility: hidden; }
 .phone-canvas { position: absolute; inset: -12% -9%; pointer-events: none; touch-action: pan-y; opacity: 0; transition: opacity .6s ease-out; }
 .phone-canvas.is-ready { opacity: 1; }
+.phone-capture { position: absolute; z-index: 4; touch-action: none; cursor: grab; }
+.phone-capture:active { cursor: grabbing; }
 .phone-controls { position: absolute; bottom: 4px; right: 18px; z-index: 5; }
 .recenter { min-height: 44px; opacity: 0; pointer-events: none; background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02)), rgba(16,21,27,.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); color: var(--text-primary); border: 1px solid rgba(255,255,255,.16); border-radius: 999px; padding: 0 14px; display: inline-flex; gap: 8px; align-items: center; font-size: 12px; cursor: pointer; transition: opacity .35s ease, border-color .25s ease, transform .3s var(--ease-out); }
 /* hidden until the device was turned, yet always reachable with the keyboard (focus reveals it) */
@@ -108,7 +110,7 @@ a { color: inherit; text-decoration: none; }
 .recenter:hover { opacity: 1; border-color: rgba(34,227,176,.6); transform: translateY(-1px); }
 .recenter:active { transform: scale(.97); }
 .recenter-active { opacity: .95; pointer-events: auto; border-color: rgba(34,227,176,.55); }
-.demo-caption { position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); margin: 0; z-index: 3; color: #8e9aab; font: 12.5px/1 Roboto, sans-serif; letter-spacing: .02em; white-space: nowrap; pointer-events: none; }
+.demo-caption { position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); margin: 0; z-index: 3; padding: 8px 12px; color: #e3e9ef; border: 1px solid rgba(255,255,255,.16); border-radius: 999px; background: rgba(9,12,16,.96); font: 12.5px/1 Roboto, sans-serif; letter-spacing: .02em; white-space: nowrap; pointer-events: none; }
 .gesture-hint { position: absolute; left: 50%; bottom: 62px; z-index: 4; display: inline-flex; align-items: center; gap: 8px; margin: 0; padding: 9px 16px; border-radius: 999px; color: #e2f9f3; font: 600 14px Inter, sans-serif; letter-spacing: .01em; background: linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,.03)), rgba(13,24,24,.6); border: 1px solid rgba(34,227,176,.45); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: 0 14px 34px -14px rgba(34,227,176,.6); opacity: 0; transform: translate3d(-50%, 8px, 0); pointer-events: none; transition: opacity .4s var(--ease-out), transform .5s var(--ease-out); white-space: nowrap; }
 .gesture-hint.is-visible { opacity: 1; transform: translate3d(-50%, 0, 0); }
 .gesture-hint svg { color: var(--color-primary); }
@@ -116,7 +118,7 @@ a { color: inherit; text-decoration: none; }
 
 .float-pos { position: absolute; z-index: 8; will-change: transform; pointer-events: none; scale: var(--cs, 1); } /* decorative: never intercepts a drag aimed at the device */
 /* Card placement is verified against the projected display (data-screen-quad) at every width: the panels sit beside the device and never over its screen. */
-.lock-pos { top: 95px; left: -14px; transform-origin: 0 0; }
+.lock-pos { top: 95px; left: -34px; transform-origin: 0 0; }
 .alert-pos { right: -20px; top: 343px; transform-origin: 100% 0; }
 .float-tilt { transform-style: preserve-3d; will-change: transform; }
 .float-tilt-lock { transform: perspective(900px) rotateY(9deg) rotateX(-3deg) rotateZ(2deg); }
@@ -196,12 +198,12 @@ a { color: inherit; text-decoration: none; }
 }
 @media (max-width: 1599px) {
   .float-pos { --cs: .84; }
-  .lock-pos { left: 3px; top: 12px; }
+  .lock-pos { left: -14px; top: 12px; }
   .alert-pos { right: 8px; top: 316px; } /* inside the viewport even where scrollbars take no room */
 }
 @media (max-width: 1439px) {
   .float-pos { --cs: .68; }
-  .lock-pos { left: 0; top: 12px; }
+  .lock-pos { left: -10px; top: 12px; }
   .alert-pos { right: 6px; top: 316px; }
 }
 @media (min-width: 1024px) and (max-width: 1180px) {

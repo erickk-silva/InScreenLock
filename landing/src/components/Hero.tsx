@@ -2,12 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { ArrowDown, ArrowRight, CircleAlert, CirclePlay, Info, Layers3, MegaphoneOff, ShieldCheck } from 'lucide-react';
-import SplitText from './react-bits/SplitText';
-import BlurText from './react-bits/BlurText';
 import ShinyText from './react-bits/ShinyText';
 import StarBorder from './react-bits/StarBorder';
 import ClickSpark from './react-bits/ClickSpark';
-import AnimatedContent from './react-bits/AnimatedContent';
 import Magnet from './react-bits/Magnet';
 import SpotlightCard from './react-bits/SpotlightCard';
 import PhoneExperience from './phone-3d/PhoneExperience';
@@ -15,7 +12,6 @@ import SiteHeader from './SiteHeader';
 import AuroraBackdrop from './AuroraBackdrop';
 import DownloadSection from './DownloadSection';
 import { AndroidGlyph, LockGlyph } from './HeroGlyphs';
-import { useMotionStage } from '@/hooks/useAfter';
 import { usePointerParallax } from '@/hooks/usePointerParallax';
 import { prefersReducedMotion } from '@/lib/motion-preference';
 import { release } from '@/lib/release';
@@ -31,25 +27,7 @@ const GLASS_CORAL = { '--spotlight-card-surface': 'rgba(46, 20, 28, .44)', '--sp
 const RIBBON_LOWER: RibbonSpec = { cx: 380, cy: 410, rx: 365, ry: 240, rotate: -22, from: 230, to: 94, width: 154, peak: 0.38 };
 const RIBBON_RIGHT: RibbonSpec = { cx: 380, cy: 410, rx: 392, ry: 244, rotate: -22, from: 48, to: -68, width: 126, peak: 0.62 };
 const RIBBONS = [RIBBON_LOWER, RIBBON_RIGHT].map((spec) => ({ outline: ribbonOutline(spec), rim: ribbonRim(spec) }));
-const LINE_FROM = { opacity: 1, y: '8px', filter: 'blur(0px)' };
-const LINE_TO = { opacity: 1, y: 0, filter: 'blur(0px)' };
-
-/**
- * The server HTML carries the plain copy. React Bits starts from visible text and only adds a short positional highlight after hydration.
- */
-function HeadlineLine({ text, startMs, stagger, duration }: { text: string; startMs: number; stagger: number; duration: number }) {
-  const stage = useMotionStage(startMs);
-  return stage === 'motion'
-    ? <SplitText tag="span" text={text} className="h1-fragment" trigger="load" splitType="chars" delay={stagger} duration={duration} textAlign="left" from={LINE_FROM} to={LINE_TO} />
-    : <span className="h1-fragment motion-hide">{text}</span>;
-}
-
-function Subheadline() {
-  const stage = useMotionStage(560);
-  return stage === 'motion'
-    ? <BlurText text={SUBHEADLINE} className="subheadline" trigger="load" animateBy="words" direction="bottom" delay={34} stepDuration={.5} blur={0} distance={8} animationFrom={{ opacity: 1, y: 8, filter: 'blur(0px)' }} animationTo={[{ opacity: 1, y: -1, filter: 'blur(0px)' }, { opacity: 1, y: 0, filter: 'blur(0px)' }]} />
-    : <p className="subheadline motion-hide">{SUBHEADLINE}</p>;
-}
+function HeadlineLine({ text }: { text: string }) { return <span className="h1-fragment">{text}</span>; }
 
 export default function Hero() {
   const landing = useRef<HTMLDivElement>(null);
@@ -75,25 +53,25 @@ export default function Hero() {
       <section className="hero-copy">
         <span className="eyebrow enter" style={delayed(150)}><ShinyText text="SEU TEMPO, SOB SEU CONTROLE" color="#22e3b0" shineColor="#f2fffb" speed={2.2} delay={9} angle={105} shineWidth={55} softness={.9} glow={.3} /></span>
         <h1 id="hero-title" aria-label="Seu feed não tem fim. Seu tempo tem.">
-          <span className="h1-line" aria-hidden="true"><HeadlineLine text="Seu feed não tem fim." startMs={0} stagger={22} duration={.8} /></span>
-          <span className="h1-line h1-accent" aria-hidden="true"><HeadlineLine text="Seu tempo tem." startMs={270} stagger={26} duration={.85} /></span>
+          <span className="h1-line" aria-hidden="true"><HeadlineLine text="Seu feed não tem fim." /></span>
+          <span className="h1-line h1-accent" aria-hidden="true"><HeadlineLine text="Seu tempo tem." /></span>
         </h1>
-        <Subheadline/>
-        <AnimatedContent className="hero-actions" trigger="mount" initialOpacity={1} animateOpacity={false} distance={8} duration={.85} delay={.18}>
+        <p className="subheadline">{SUBHEADLINE}</p>
+        <div className="hero-actions">
           <ClickSpark sparkColor={['#22e3b0', '#7ffbe0', '#ffffff']} sparkCount={12} sparkRadius={34} sparkSize={9} sparkWidth={2.2} duration={.65} easing="ease-out" shape="streak" glow={.6} style={{ display: 'inline-flex', width: 'auto', height: 'auto' }}>
             <Magnet disabled={!finePointer} maxOffset={5} magnetStrength={8} padding={30} wrapperClassName="magnet-wrap">
               <StarBorder as="a" href="#download" className="button button-primary" radius={26} thickness={1.5} duration={5} trailLength={.34} glow={.75} hover="lap" backgroundColor={MINT_FLAT} textColor="#03231c" color="#ffffff" trailColor="#b8fff0" borderColor="rgba(255,255,255,.3)"><AndroidGlyph size={30} color="#03231c"/>Baixar para Android<ArrowRight size={28}/></StarBorder>
             </Magnet>
           </ClickSpark>
           <Magnet disabled={!finePointer} maxOffset={4} magnetStrength={9} padding={25} wrapperClassName="magnet-wrap"><a className="button button-secondary" href="#demo"><span className="play-icon"><CirclePlay size={37}/></span>Ver demonstração</a></Magnet>
-        </AnimatedContent>
+        </div>
         {release.status === 'preparing' && <p className="release-note enter" style={delayed(1050)}>Download em preparação. O APK será publicado após verificação.</p>}
         <div className="benefits-wrap">
-          <AnimatedContent className="benefits" trigger="mount" distance={10} duration={.6} delay={1.1} stagger={.07} aria-describedby="benefits-caveat">
+          <div className="benefits" aria-describedby="benefits-caveat">
             <span className="benefit"><ShieldCheck aria-hidden="true"/>Sem conta</span><span className="benefit-dot" aria-hidden="true">•</span>
             <span className="benefit"><MegaphoneOff aria-hidden="true"/>Sem anúncios</span><span className="benefit-dot" aria-hidden="true">•</span>
             <span className="benefit"><Layers3 aria-hidden="true"/>100% local</span><Info className="benefits-info" size={16} aria-hidden="true"/>
-          </AnimatedContent>
+          </div>
           <p className="benefits-caveat" id="benefits-caveat">Verificado no APK assinado 1.0.0: sem permissão de internet e sem SDK de anúncios; o tempo de uso vem do histórico do Android e fica no aparelho. <a href="#privacidade">Detalhes em Privacidade.</a></p>
         </div>
       </section>
@@ -120,8 +98,8 @@ export default function Hero() {
         <PhoneExperience onLimitReached={reachLimit}/>
         <div className="float-pos alert-pos" data-parallax="8"><div className="float-bob float-bob-alt"><div className="float-tilt float-tilt-alert"><SpotlightCard className={`float-card alert-card${limitReached ? ' is-in' : ''}`} style={GLASS_CORAL} spotlightColor="rgba(255,107,122,.32)" intensity={.45} spotlightSize={260} softness={.5}><span className="alert-icon"><CircleAlert size={48}/></span><span>Limite<br/>alcançado</span></SpotlightCard></div></div></div>
       </section>
+      <div className="hero-footer"><span className="footer-caption">RECONQUISTE SEU TEMPO</span><ArrowDown className="footer-chevron" size={27} strokeWidth={3}/></div>
     </main>
-    <footer className="hero-footer"><span className="footer-caption">RECONQUISTE SEU TEMPO</span><ArrowDown className="footer-chevron" size={27} strokeWidth={3}/></footer>
     <DownloadSection/>
   </div>;
 }

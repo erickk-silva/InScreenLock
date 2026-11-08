@@ -60,8 +60,8 @@ function DemoLab() {
         <SpotlightCard className="glass-panel pin-demo-card" spotlightColor="rgba(34,227,176,.12)" intensity={.18}>
           <div className="panel-topline"><span><LockKeyhole size={17}/> PIN de demonstração</span></div>
           <p>Toque em dígitos fictícios para experimentar o teclado.</p>
-          <div className="pin-dots" aria-label={`${pin.length} de 4 dígitos selecionados`}>{Array.from({ length: 4 }, (_, index) => <span key={index} className={index < pin.length ? 'filled' : ''} aria-hidden="true"/>)}</div>
-          <div className="demo-keypad" aria-label="Teclado visual de demonstração">{['1','2','3','4','5','6','7','8','9','apagar','0','ok'].map((key) => <button type="button" key={key} aria-label={key === 'apagar' ? 'Apagar dígito' : key === 'ok' ? 'Limpar PIN de demonstração' : `Dígito ${key}`} onClick={() => key === 'apagar' ? setPin((current) => current.slice(0, -1)) : key === 'ok' ? setPin('') : enterDigit(key)}>{key === 'apagar' ? <Minus size={15}/> : key === 'ok' ? <Check size={15}/> : key}</button>)}</div>
+          <div className="pin-dots" role="status" aria-label={`${pin.length} de 4 dígitos selecionados`}>{Array.from({ length: 4 }, (_, index) => <span key={index} className={index < pin.length ? 'filled' : ''} aria-hidden="true"/>)}</div>
+          <div className="demo-keypad" role="group" aria-label="Teclado visual de demonstração">{['1','2','3','4','5','6','7','8','9','apagar','0','ok'].map((key) => <button type="button" key={key} aria-label={key === 'apagar' ? 'Apagar dígito' : key === 'ok' ? 'Limpar PIN de demonstração' : `Dígito ${key}`} onClick={() => key === 'apagar' ? setPin((current) => current.slice(0, -1)) : key === 'ok' ? setPin('') : enterDigit(key)}>{key === 'apagar' ? <Minus size={15}/> : key === 'ok' ? <Check size={15}/> : key}</button>)}</div>
           <p className="demo-warning"><ShieldCheck size={16}/> Demonstração interativa — não configura seu aparelho. Nada é salvo ou enviado.</p>
         </SpotlightCard>
       </div>

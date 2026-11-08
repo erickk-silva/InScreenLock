@@ -20,7 +20,7 @@ export default function MagicBento({ items }: { items: MagicBentoCard[] }) {
     event.currentTarget.style.setProperty('--pointer-x', `${event.clientX - bounds.left}px`);
     event.currentTarget.style.setProperty('--pointer-y', `${event.clientY - bounds.top}px`);
   }
-  return <div ref={root} className="magic-bento-grid" aria-label="Recursos do InScreenLock">{items.map(({ icon: Icon, title, body, size, label }) => <article className={`feature-card bento-${size}`} key={title} onPointerMove={track} onPointerEnter={track}>
+  return <div ref={root} className="magic-bento-grid" role="group" aria-label="Recursos do InScreenLock">{items.map(({ icon: Icon, title, body, size, label }) => <article className={`feature-card bento-${size}`} key={title} onPointerMove={track} onPointerEnter={track}>
     <span className="feature-icon"><Icon size={22}/></span><span className="feature-index">{label}</span><h3>{title}</h3><p>{body}</p>
   </article>)}</div>;
 }
