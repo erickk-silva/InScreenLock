@@ -1,0 +1,4 @@
+User-Agent: *
+Allow: /
+
+Sitemap: https://erickk-silva.github.io/InScreenLock/sitemap.xml
