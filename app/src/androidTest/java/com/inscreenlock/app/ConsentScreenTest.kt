@@ -2,6 +2,7 @@ package com.inscreenlock.app
 
 import androidx.activity.compose.setContent
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsEnabled
@@ -14,6 +15,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.unit.dp
 import com.inscreenlock.app.ui.FirstLaunchFlow
 import com.inscreenlock.app.ui.OnboardingScreen
 import org.junit.rules.RuleChain
@@ -49,7 +51,7 @@ class ConsentScreenTest {
     @Test
     fun affirmativeConsentLabelTogglesTheContinueAction() {
         composeRule.onNodeWithTag("onboarding-start").performClick()
-        composeRule.onNodeWithTag("accessibility-consent").performScrollTo().performClick()
+        composeRule.onNodeWithTag("accessibility-consent").performScrollTo().assertHeightIsAtLeast(48.dp).performClick()
         composeRule.onNodeWithText("Continuar para acessibilidade").assertIsEnabled()
     }
 

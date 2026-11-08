@@ -657,7 +657,7 @@ private fun ConsentScreen(onContinue: () -> Unit) {
         )
         Spacer(Modifier.height(20.dp))
         Row(
-            modifier = Modifier.fillMaxWidth().testTag("accessibility-consent").toggleable(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("accessibility-consent").toggleable(
                 value = consentChecked,
                 role = Role.Checkbox,
                 onValueChange = { consentChecked = it },
@@ -1081,6 +1081,16 @@ internal fun MoreScreen(
 ) {
     var confirmation by remember { mutableStateOf(false) }
     val credentialAvailable = deviceSecure || settings.hasPin
+    val monitoringChecked = settings.monitoringEnabled && usageAvailable && accessibilityEnabled
+    val requestMonitoringChange: (Boolean) -> Unit = { enabled ->
+        val action = { onMonitoringChanged(enabled) }
+        when {
+            enabled -> action()
+            ProtectedChange.requiresAuthentication(ProtectedChange.DisableMonitoring, credentialAvailable) -> onAuthenticate(action)
+            ProtectedChange.requiresConfirmation(ProtectedChange.DisableMonitoring, credentialAvailable) -> confirmation = true
+            else -> action()
+        }
+    }
     Column(modifier.fillMaxSize().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = 640.dp).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
         ScreenHeader("Mais", subtitle = "Permissões, credencial e privacidade")
         SurfaceCard(Modifier.fillMaxWidth()) {
@@ -1094,13 +1104,29 @@ internal fun MoreScreen(
         Spacer(Modifier.height(12.dp))
         SurfaceCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
-                Text("Monitoramento", style = MaterialTheme.typography.titleMedium)
-                Text(if (settings.monitoringEnabled && usageAvailable && accessibilityEnabled) "Ativo" else "Desativado ou sem permissões", color = Muted)
-                Switch(checked = settings.monitoringEnabled && usageAvailable && accessibilityEnabled, enabled = usageAvailable && accessibilityEnabled, onCheckedChange = { enabled ->
-                    if (enabled) onMonitoringChanged(true)
-                    else if (ProtectedChange.requiresAuthentication(ProtectedChange.DisableMonitoring, credentialAvailable)) onAuthenticate { onMonitoringChanged(false) }
-                    else confirmation = true
-                }, modifier = Modifier.testTag("monitoring-switch"))
+                Row(
+                    modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 56.dp)
+                        .toggleable(
+                            value = monitoringChecked,
+                            enabled = usageAvailable && accessibilityEnabled,
+                            role = Role.Switch,
+                            onValueChange = requestMonitoringChange,
+                        )
+                        .semantics { contentDescription = "Monitoramento" }
+                        .testTag("monitoring-switch"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Monitoramento", style = MaterialTheme.typography.titleMedium)
+                        Text(if (monitoringChecked) "Ativo" else "Desativado ou sem permissões", color = Muted)
+                    }
+                    Switch(
+                        checked = monitoringChecked,
+                        enabled = usageAvailable && accessibilityEnabled,
+                        onCheckedChange = null,
+                    )
+                }
             }
         }
         Spacer(Modifier.height(12.dp))

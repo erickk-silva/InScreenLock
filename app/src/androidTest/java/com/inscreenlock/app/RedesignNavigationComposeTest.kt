@@ -11,6 +11,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.inscreenlock.app.data.SettingsRepository
 import com.inscreenlock.app.data.UserSettings
@@ -152,6 +154,9 @@ class RedesignNavigationComposeTest {
         }
         activityRule.onNodeWithTag("monitoring-switch").performClick()
         activityRule.waitForIdle()
+        val monitoringSemantics = activityRule.onNodeWithTag("monitoring-switch").fetchSemanticsNode().config
+        assertEquals("Monitoramento", monitoringSemantics[SemanticsProperties.ContentDescription].single())
+        assertEquals(Role.Switch, monitoringSemantics[SemanticsProperties.Role])
         assertEquals(1, authCalls.get())
         assertEquals(0, disabled.get())
         pending.get()?.invoke()
